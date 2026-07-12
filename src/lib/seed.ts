@@ -587,10 +587,11 @@ export function createWebsiteForProspect(
   prospect: Prospect,
   existingSlugs: string[] = [],
 ): GeneratedWebsite {
+  const slug =
+    prospect.slug && !existingSlugs.includes(prospect.slug)
+      ? prospect.slug
+      : createSlug(`${prospect.name} preview`, existingSlugs);
   const isFlagship = prospect.id === FLAGSHIP_PROSPECT_ID;
-  const slug = isFlagship
-    ? prospect.slug
-    : createSlug(`${prospect.name} preview`, existingSlugs);
   const sections: WebsiteSection[] = isFlagship
     ? [
         {

@@ -11,7 +11,7 @@ import { LiveShowcasePreview } from "@/components/sites/live-showcase-preview";
 import { BugisBrewConciergeShowcase } from "@/components/sites/showcase/bugis-brew-concierge";
 import { SalesAgentShowcase } from "@/components/sites/showcase/sales-agent-demo";
 import { ToaPayohTelebotShowcase } from "@/components/sites/showcase/toa-payoh-telebot";
-import { getShowcaseSite } from "@/lib/showcase-sites";
+import { getBuildPreviewBySlug, getShowcaseSite } from "@/lib/showcase-sites";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
 
 const showcaseComponents: Record<string, () => ReactNode> = {
@@ -24,9 +24,12 @@ export function GeneratedSitePage({ slug }: { slug: string }) {
   const showcase = getShowcaseSite(slug);
   const ShowcaseComponent = showcaseComponents[slug];
   const { state, hydrated } = useRevenueLoop();
-  const website = state.websites.find((item) => item.slug === slug);
+  const buildPreview = getBuildPreviewBySlug(slug);
+  const websiteFromState = state.websites.find((item) => item.slug === slug);
+  const website = websiteFromState ?? buildPreview?.website;
   const prospect = website
-    ? state.prospects.find((item) => item.id === website.prospectId)
+    ? state.prospects.find((item) => item.id === website.prospectId) ??
+      buildPreview?.prospect
     : undefined;
 
   if (ShowcaseComponent) {
@@ -55,7 +58,7 @@ export function GeneratedSitePage({ slug }: { slug: string }) {
     );
   }
 
-  if (!hydrated) {
+  if (!hydrated && !buildPreview) {
     return (
       <main className="min-h-screen bg-[#0a0a0c] p-6">
         <div className="mx-auto max-w-5xl">
@@ -71,7 +74,7 @@ export function GeneratedSitePage({ slug }: { slug: string }) {
         <EmptyState
           icon={Globe2}
           title="Generated site not found"
-          description="This preview is not in the showcase catalog. Return to generated sites to view the four flagship builds."
+          description="This preview is not in the showcase catalog. Return to generated sites to browse live builds and Build Agent previews."
           action={
             <Link href="/sites">
               <Button icon={<ArrowLeft size={14} />}>Back to sites</Button>

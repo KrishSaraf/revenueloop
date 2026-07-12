@@ -24,12 +24,16 @@ export function SalesAgentView() {
     () =>
       state.calls
         .filter((call) => call.status === "Completed")
+        .filter((call) => {
+          const prospect = state.prospects.find((p) => p.id === call.prospectId);
+          return prospect?.agentState === "WON";
+        })
         .sort((a, b) => {
           const aTime = a.completedAt ?? a.startedAt ?? "";
           const bTime = b.completedAt ?? b.startedAt ?? "";
           return bTime.localeCompare(aTime);
         }),
-    [state.calls],
+    [state.calls, state.prospects],
   );
 
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
@@ -235,7 +239,7 @@ export function SalesAgentView() {
                             · {prospect?.category ?? "—"}
                           </p>
                         </div>
-                        <Badge tone="green">Done</Badge>
+                        <Badge tone="green">Closed</Badge>
                       </button>
                     </li>
                   );

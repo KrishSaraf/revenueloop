@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BuildPreviewCard } from "@/components/sites/build-preview-card";
 import { LiveShowcasePreview } from "@/components/sites/live-showcase-preview";
-import { demoSites, liveSite, type ShowcaseSite } from "@/lib/showcase-sites";
+import { builtPreviewSites, demoSites, liveSite, type ShowcaseSite } from "@/lib/showcase-sites";
 import { cn } from "@/lib/utils";
 
 const fade = {
@@ -340,8 +341,9 @@ export function SitesView() {
             Generated sites
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-500">
-            One live client build plus three interactive showcases. Open any site
-            and chat — AI replies in real time.
+            One live client build, seven Build Agent previews with distinct layouts,
+            plus three interactive showcases. Open any site and chat — AI replies in
+            real time.
           </p>
         </div>
         {aiLive !== null ? (
@@ -351,10 +353,11 @@ export function SitesView() {
         ) : null}
       </motion.div>
 
-      <div className="grid grid-cols-3 gap-3 sm:max-w-lg">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:max-w-2xl">
         {[
           { label: "Live sites", value: "1" },
-          { label: "Interactive sites", value: "3" },
+          { label: "Build previews", value: String(builtPreviewSites.length) },
+          { label: "Interactive", value: "3" },
           { label: "Verified", value: "4" },
         ].map((stat) => (
           <motion.div
@@ -371,6 +374,22 @@ export function SitesView() {
       </div>
 
       <FeaturedLiveSite />
+
+      <motion.div variants={fade}>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-100">Build Agent portfolio</h2>
+            <p className="mt-0.5 text-xs text-zinc-500">
+              Seven distinct layouts — cafe, tuition, fitness, salon, dental, bakery, and florist
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {builtPreviewSites.map((site, index) => (
+            <BuildPreviewCard key={site.id} site={site} index={index} />
+          ))}
+        </div>
+      </motion.div>
 
       <motion.div variants={fade}>
         <div className="mb-4 flex items-center justify-between gap-3">
