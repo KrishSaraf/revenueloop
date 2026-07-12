@@ -8,29 +8,55 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { ApprovalCard } from "@/components/shared/approval-card";
+import { CallTranscriptFeed } from "@/components/shared/call-transcript";
 import {
   LiveOutboundCall,
   type LiveCallStatus,
 } from "@/components/shared/live-outbound-call";
-import { FLAGSHIP_PROSPECT_ID } from "@/lib/seed";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
-import { currency } from "@/lib/utils";
+import { cn, currency } from "@/lib/utils";
 
 export function SalesAgentView() {
   const { state, hydrated } = useRevenueLoop();
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  const awaiting = state.prospects.filter(
-    (p) => p.agentState === "AWAITING_APPROVAL" && !p.doNotContact,
+  const completedCalls = useMemo(
+    () =>
+      state.calls
+        .filter((call) => call.status === "Completed")
+        .sort((a, b) => {
+          const aTime = a.completedAt ?? a.startedAt ?? "";
+          const bTime = b.completedAt ?? b.startedAt ?? "";
+          return bTime.localeCompare(aTime);
+        }),
+    [state.calls],
   );
+
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
+
   const activeCall = state.calls.find((c) => c.status === "Calling");
-  const flagshipCall = state.calls.find(
-    (c) => c.prospectId === FLAGSHIP_PROSPECT_ID && c.status === "Completed",
-  );
-  const latestCall = activeCall ?? flagshipCall ?? state.calls.find((c) => c.status === "Completed") ?? state.calls[0];
-  const callProspect = latestCall
-    ? state.prospects.find((p) => p.id === latestCall.prospectId)
+  const selectedCall =
+    activeCall ??
+    completedCalls.find((call) => call.id === selectedCallId) ??
+    completedCalls[0] ??
+    state.calls[0];
+
+  useEffect(() => {
+    if (activeCall) return;
+    if (selectedCallId && completedCalls.some((call) => call.id === selectedCallId)) {
+      return;
+    }
+    if (completedCalls[0]) {
+      setSelectedCallId(completedCalls[0].id);
+    }
+  }, [activeCall, completedCalls, selectedCallId]);
+
+  const callProspect = selectedCall
+    ? state.prospects.find((p) => p.id === selectedCall.prospectId)
     : undefined;
+  const callTranscript = selectedCall
+    ? state.transcripts.filter((entry) => entry.callId === selectedCall.id)
+    : [];
   const won = state.prospects.filter((p) => p.agentState === "WON");
   const lost = state.prospects.filter((p) => p.agentState === "REJECTED");
   const inConversation = state.prospects.filter((p) =>
@@ -38,15 +64,15 @@ export function SalesAgentView() {
   );
 
   const callStatus: LiveCallStatus = useMemo(() => {
-    if (!latestCall) return "idle";
-    if (latestCall.status === "Calling") return "connected";
-    if (latestCall.status === "Completed") return "ended";
+    if (!selectedCall) return "idle";
+    if (selectedCall.status === "Calling") return "connected";
+    if (selectedCall.status === "Completed") return "ended";
     return "idle";
-  }, [latestCall]);
+  }, [selectedCall]);
 
   useEffect(() => {
     if (callStatus !== "connected") {
-      setElapsedSeconds(latestCall?.durationSeconds ?? 0);
+      setElapsedSeconds(selectedCall?.durationSeconds ?? 0);
       return;
     }
 
@@ -56,7 +82,11 @@ export function SalesAgentView() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [callStatus, latestCall?.id, latestCall?.durationSeconds]);
+  }, [callStatus, selectedCall?.id, selectedCall?.durationSeconds]);
+
+  const awaiting = state.prospects.filter(
+    (p) => p.agentState === "AWAITING_APPROVAL" && !p.doNotContact,
+  );
 
   if (!hydrated) {
     return <div className="skeleton h-64 rounded-xl" aria-hidden />;
@@ -157,6 +187,63 @@ export function SalesAgentView() {
             )}
           </Panel>
 
+          {/* Completed calls */}
+          <Panel>
+            <PanelHeader
+              eyebrow="History"
+              title="Completed calls"
+              action={
+                completedCalls.length > 0 ? (
+                  <Badge tone="muted">{completedCalls.length}</Badge>
+                ) : undefined
+              }
+            />
+            {completedCalls.length === 0 ? (
+              <div className="p-5">
+                <EmptyState
+                  icon={PhoneCall}
+                  title="No completed calls"
+                  description="Transcripts appear here after outbound calls finish."
+                />
+              </div>
+            ) : (
+              <ul className="divide-y divide-white/[0.05]">
+                {completedCalls.map((call) => {
+                  const prospect = state.prospects.find((p) => p.id === call.prospectId);
+                  const isSelected = selectedCall?.id === call.id;
+                  return (
+                    <li key={call.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCallId(call.id)}
+                        className={cn(
+                          "flex w-full cursor-pointer items-center justify-between gap-3 px-4 py-3 text-left transition-colors sm:px-5",
+                          isSelected
+                            ? "bg-emerald-400/[0.06]"
+                            : "hover:bg-white/[0.03]",
+                        )}
+                        aria-pressed={isSelected}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-zinc-200">
+                            {prospect?.name ?? "Unknown prospect"}
+                          </p>
+                          <p className="text-[11px] text-zinc-600">
+                            {call.durationSeconds
+                              ? `${Math.floor(call.durationSeconds / 60)}m ${call.durationSeconds % 60}s`
+                              : "Completed"}{" "}
+                            · {prospect?.category ?? "—"}
+                          </p>
+                        </div>
+                        <Badge tone="green">Done</Badge>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Panel>
+
           {/* Won / lost */}
           <div className="grid grid-cols-2 gap-3">
             <Panel>
@@ -213,18 +300,18 @@ export function SalesAgentView() {
             eyebrow="Call console"
             title={callProspect ? callProspect.name : "No call yet"}
             action={
-              latestCall ? (
+              selectedCall ? (
                 <div className="flex items-center gap-2">
-                  {latestCall.status === "Calling" ? (
+                  {selectedCall.status === "Calling" ? (
                     <>
                       <StatusDot tone="green" pulse />
                       <span className="font-mono text-xs text-emerald-300">ON CALL</span>
                     </>
                   ) : (
-                    <Badge tone={latestCall.status === "Completed" ? "green" : "muted"}>
-                      {latestCall.status === "Completed" ? "Done" : latestCall.status}
-                      {latestCall.durationSeconds
-                        ? ` · ${Math.floor(latestCall.durationSeconds / 60)}m ${latestCall.durationSeconds % 60}s`
+                    <Badge tone={selectedCall.status === "Completed" ? "green" : "muted"}>
+                      {selectedCall.status === "Completed" ? "Done" : selectedCall.status}
+                      {selectedCall.durationSeconds
+                        ? ` · ${Math.floor(selectedCall.durationSeconds / 60)}m ${selectedCall.durationSeconds % 60}s`
                         : ""}
                     </Badge>
                   )}
@@ -232,7 +319,7 @@ export function SalesAgentView() {
               ) : undefined
             }
           />
-          {!latestCall ? (
+          {!selectedCall ? (
             <div className="flex-1 p-5">
               <EmptyState
                 icon={PhoneCall}
@@ -247,18 +334,27 @@ export function SalesAgentView() {
                   status={callStatus}
                   seconds={
                     callStatus === "ended"
-                      ? (latestCall.durationSeconds ?? elapsedSeconds)
+                      ? (selectedCall.durationSeconds ?? elapsedSeconds)
                       : elapsedSeconds
                   }
                   calleeName={callProspect?.name}
                   calleePhone={callProspect?.phone}
                   outcome={
                     callStatus === "ended"
-                      ? latestCall.outcome ??
+                      ? selectedCall.outcome ??
                         "Owner agreed S$140 one-time + S$20/year. Checkout link sent."
                       : undefined
                   }
                 />
+
+                {callStatus === "ended" && callTranscript.length > 0 ? (
+                  <div className="mt-5 border-t border-white/[0.06] pt-4">
+                    <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+                      Call transcript
+                    </p>
+                    <CallTranscriptFeed entries={callTranscript} />
+                  </div>
+                ) : null}
               </div>
               <div className="border-t border-white/[0.06] p-4 sm:p-5">
                 <div className="grid gap-2.5 sm:grid-cols-2">
@@ -267,8 +363,8 @@ export function SalesAgentView() {
                       Detected objections
                     </p>
                     <p className="mt-0.5 text-xs text-zinc-400">
-                      {latestCall.detectedObjections.length > 0
-                        ? latestCall.detectedObjections.join(" · ")
+                      {selectedCall.detectedObjections.length > 0
+                        ? selectedCall.detectedObjections.join(" · ")
                         : "None detected"}
                     </p>
                   </div>
@@ -276,7 +372,7 @@ export function SalesAgentView() {
                     <p className="text-[10px] uppercase tracking-wide text-zinc-600">
                       AI recommendation
                     </p>
-                    <p className="mt-0.5 text-xs text-zinc-400">{latestCall.nextAction}</p>
+                    <p className="mt-0.5 text-xs text-zinc-400">{selectedCall.nextAction}</p>
                   </div>
                 </div>
                 {callProspect ? (

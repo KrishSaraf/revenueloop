@@ -36,7 +36,7 @@ import { assertCanPlaceCall, transitionAgentState } from "@/lib/agent/state-mach
 import { nowIso } from "@/lib/utils";
 import type { DiscoveryRequest } from "@/lib/validation/discovery";
 
-const STORAGE_KEY = "venturemint-state-v7";
+const STORAGE_KEY = "venturemint-state-v9";
 
 type DiscoveryInput = DiscoveryRequest;
 
