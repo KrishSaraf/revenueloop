@@ -1251,11 +1251,6 @@ export function CommandCentreView() {
     discoverNextWave();
   };
 
-  const focusDiscovery =
-    pipelineRunning && !findingsShared && activeStage === "discover";
-  const visibleAgents = focusDiscovery
-    ? agentDefinitions.filter((agent) => agent.step <= 3)
-    : agentDefinitions;
   const showSitePreview =
     Boolean(pipelineProspect.siteSlug) &&
     (phases["Build Agent"] === "done" ||
@@ -1371,22 +1366,8 @@ export function CommandCentreView() {
         </div>
       ) : null}
 
-      {focusDiscovery ? (
-        <p className="text-xs text-zinc-500">
-          Agents 1–3 scanning Singapore neighbourhoods for businesses without adequate
-          web presence…
-        </p>
-      ) : null}
-
-      <div
-        className={cn(
-          "grid min-h-0 auto-rows-fr gap-3",
-          focusDiscovery
-            ? "grid-cols-1 sm:grid-cols-3"
-            : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 xl:grid-rows-2",
-        )}
-      >
-        {visibleAgents.map((agent) => (
+      <div className="grid min-h-0 auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:grid-rows-2">
+        {agentDefinitions.map((agent) => (
           <AgentCard
             key={agent.name}
             agent={agent}

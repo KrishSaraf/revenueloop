@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 import {
@@ -14,9 +14,16 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { CardSkeleton } from "@/components/ui/skeleton";
 import { BuildPreviewCard } from "@/components/sites/build-preview-card";
 import { LiveShowcasePreview } from "@/components/sites/live-showcase-preview";
-import { builtPreviewSites, demoSites, liveSite, type ShowcaseSite } from "@/lib/showcase-sites";
+import {
+  demoSites,
+  getWorkspaceSiteCatalog,
+  liveSite,
+  type ShowcaseSite,
+} from "@/lib/showcase-sites";
+import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
 import { cn } from "@/lib/utils";
 
 const fade = {
@@ -195,8 +202,7 @@ function BrowserChrome({ children, url }: { children: ReactNode; url: string }) 
   );
 }
 
-function FeaturedLiveSite() {
-  const site = liveSite;
+function FeaturedLiveSite({ site }: { site: typeof liveSite }) {
   return (
     <motion.article
       variants={fade}
@@ -319,7 +325,18 @@ function DemoCard({ site, index }: { site: ShowcaseSite; index: number }) {
 
 export function SitesView() {
   const reduced = useReducedMotion();
+  const { state, hydrated } = useRevenueLoop();
   const [aiLive, setAiLive] = useState<boolean | null>(null);
+
+  const catalog = useMemo(
+    () => getWorkspaceSiteCatalog(state.prospects),
+    [state.prospects],
+  );
+
+  const verifiedCount =
+    (catalog.liveSite?.verified ? 1 : 0) +
+    catalog.buildPreviews.filter((site) => site.verified).length +
+    demoSites.filter((site) => site.verified).length;
 
   useEffect(() => {
     fetch("/api/showcase/chat")
@@ -327,6 +344,19 @@ export function SitesView() {
       .then((data: { configured?: boolean }) => setAiLive(Boolean(data.configured)))
       .catch(() => setAiLive(false));
   }, []);
+
+  if (!hydrated) {
+    return (
+      <div className="space-y-4">
+        <CardSkeleton />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <CardSkeleton key={index} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -341,9 +371,9 @@ export function SitesView() {
             Generated sites
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-500">
-            One live client build, seven Build Agent previews with distinct layouts,
-            plus three interactive showcases. Open any site and chat — AI replies in
-            real time.
+            {catalog.pipelineSiteCount} pipeline site
+            {catalog.pipelineSiteCount === 1 ? "" : "s"} synced with your prospects list,
+            plus three interactive showcases you can chat with live.
           </p>
         </div>
         {aiLive !== null ? (
@@ -353,12 +383,13 @@ export function SitesView() {
         ) : null}
       </motion.div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:max-w-2xl">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 sm:max-w-3xl">
         {[
-          { label: "Live sites", value: "1" },
-          { label: "Build previews", value: String(builtPreviewSites.length) },
+          { label: "Pipeline sites", value: String(catalog.pipelineSiteCount) },
+          { label: "Live sites", value: catalog.liveSite ? "1" : "0" },
+          { label: "Build previews", value: String(catalog.buildPreviews.length) },
           { label: "Interactive", value: "3" },
-          { label: "Verified", value: "4" },
+          { label: "Verified", value: String(verifiedCount) },
         ].map((stat) => (
           <motion.div
             key={stat.label}
@@ -373,23 +404,27 @@ export function SitesView() {
         ))}
       </div>
 
-      <FeaturedLiveSite />
+      {catalog.liveSite ? <FeaturedLiveSite site={catalog.liveSite} /> : null}
 
-      <motion.div variants={fade}>
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-100">Build Agent portfolio</h2>
-            <p className="mt-0.5 text-xs text-zinc-500">
-              Seven distinct layouts — cafe, tuition, fitness, salon, dental, bakery, and florist
-            </p>
+      {catalog.buildPreviews.length > 0 ? (
+        <motion.div variants={fade}>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-zinc-100">Build Agent portfolio</h2>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                {catalog.buildPreviews.length} distinct layout
+                {catalog.buildPreviews.length === 1 ? "" : "s"} for businesses in your
+                pipeline
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {builtPreviewSites.map((site, index) => (
-            <BuildPreviewCard key={site.id} site={site} index={index} />
-          ))}
-        </div>
-      </motion.div>
+          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+            {catalog.buildPreviews.map((site, index) => (
+              <BuildPreviewCard key={site.id} site={site} index={index} />
+            ))}
+          </div>
+        </motion.div>
+      ) : null}
 
       <motion.div variants={fade}>
         <div className="mb-4 flex items-center justify-between gap-3">

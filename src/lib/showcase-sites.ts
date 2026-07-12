@@ -1,4 +1,4 @@
-import { createWebsiteForProspect, seededProspects } from "@/lib/seed";
+import { createWebsiteForProspect, FLAGSHIP_PROSPECT_ID, getWorkspaceProspects, seededProspects } from "@/lib/seed";
 import { getPreviewLayoutId, type PreviewLayoutId } from "@/lib/site-design";
 import type { GeneratedWebsite, Prospect } from "@/lib/types";
 
@@ -242,6 +242,27 @@ export const builtPreviewSites: BuildPreviewSite[] = buildPreviewProspectIds
   .map((id) => seededProspects.find((item) => item.id === id))
   .filter((item): item is Prospect => item != null)
   .map(buildPreviewSiteForProspect);
+
+export function getWorkspaceSiteCatalog(prospects: Prospect[]) {
+  const workspace = getWorkspaceProspects(prospects);
+  const previewIds = new Set<string>(buildPreviewProspectIds);
+  const buildPreviews = workspace
+    .filter((prospect) => prospect.id !== FLAGSHIP_PROSPECT_ID && previewIds.has(prospect.id))
+    .map((prospect) => {
+      const seed = seededProspects.find((item) => item.id === prospect.id);
+      return buildPreviewSiteForProspect(
+        seed ? { ...seed, ...prospect, identifiedGaps: prospect.identifiedGaps ?? seed.identifiedGaps } : prospect,
+      );
+    });
+  const showLiveSite = workspace.some((prospect) => prospect.id === FLAGSHIP_PROSPECT_ID);
+
+  return {
+    workspace,
+    liveSite: showLiveSite ? liveSite : null,
+    buildPreviews,
+    pipelineSiteCount: (showLiveSite ? 1 : 0) + buildPreviews.length,
+  };
+}
 
 export function getBuildPreviewBySlug(slug: string) {
   return builtPreviewSites.find((site) => site.slug === slug);

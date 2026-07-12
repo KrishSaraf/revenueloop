@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CardSkeleton } from "@/components/ui/skeleton";
 import { stateTone } from "@/lib/presentation";
 import { discoveryWaveIds, getWorkspaceProspects } from "@/lib/seed";
+import { getWorkspaceSiteCatalog } from "@/lib/showcase-sites";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
 import { stateLabels } from "@/lib/types";
 import { cn, currency } from "@/lib/utils";
@@ -33,6 +34,11 @@ export function ProspectsView() {
     [state.prospects],
   );
 
+  const siteCatalog = useMemo(
+    () => getWorkspaceSiteCatalog(state.prospects),
+    [state.prospects],
+  );
+
   if (!hydrated) {
     return (
       <div className="space-y-2">
@@ -48,7 +54,9 @@ export function ProspectsView() {
       <div>
         <h1 className="text-xl font-semibold text-zinc-100">Prospects</h1>
         <p className="mt-1 text-sm text-zinc-500">
-          Pipeline businesses and leads surfaced after a dashboard run.
+          {prospects.length} business{prospects.length === 1 ? "" : "es"} in pipeline ·{" "}
+          {siteCatalog.pipelineSiteCount} generated site
+          {siteCatalog.pipelineSiteCount === 1 ? "" : "s"}
         </p>
       </div>
 
