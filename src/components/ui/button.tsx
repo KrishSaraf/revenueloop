@@ -2,25 +2,35 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
+  size?: ButtonSize;
   icon?: ReactNode;
 }
 
 const variants: Record<ButtonVariant, string> = {
   primary:
-    "border-emerald-300/50 bg-emerald-300 text-black shadow-[0_0_28px_rgba(57,255,136,0.22)] hover:bg-emerald-200",
+    "border-transparent bg-emerald-500 text-emerald-950 hover:bg-emerald-400 shadow-[0_1px_12px_rgba(16,185,129,0.25)]",
   secondary:
-    "border-white/10 bg-white/[0.07] text-white hover:border-emerald-300/40 hover:bg-white/[0.1]",
-  ghost: "border-transparent bg-transparent text-zinc-300 hover:bg-white/[0.06] hover:text-white",
+    "border-white/10 bg-white/[0.06] text-zinc-100 hover:border-white/20 hover:bg-white/[0.1]",
+  ghost:
+    "border-transparent bg-transparent text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100",
   danger:
-    "border-rose-400/40 bg-rose-500/12 text-rose-100 hover:bg-rose-500/20",
+    "border-rose-500/30 bg-rose-500/10 text-rose-300 hover:bg-rose-500/20",
+};
+
+const sizes: Record<ButtonSize, string> = {
+  sm: "h-8 px-3 text-xs",
+  md: "h-9 px-4 text-sm",
+  lg: "h-11 px-5 text-sm",
 };
 
 export function Button({
   className,
   variant = "secondary",
+  size = "md",
   icon,
   children,
   ...props
@@ -28,8 +38,9 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex h-10 items-center justify-center gap-2 rounded-lg border px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border font-medium transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
         variants[variant],
+        sizes[size],
         className,
       )}
       {...props}

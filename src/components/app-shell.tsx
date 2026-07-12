@@ -1,112 +1,241 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, Bot, Globe2, LayoutDashboard, Phone, Search } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import {
+  DollarSign,
+  Globe2,
+  LayoutDashboard,
+  Menu,
+  OctagonX,
+  Phone,
+  Search,
+  X,
+} from "lucide-react";
+import { Badge, StatusDot } from "@/components/ui/badge";
+import { CommandPalette } from "@/components/shared/command-palette";
+import { VentureMintLogo } from "@/components/landing/venturemint-logo";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
 import { cn } from "@/lib/utils";
 
 const nav = [
-  { href: "/dashboard", label: "Command", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/prospects", label: "Prospects", icon: Search },
   { href: "/sales-agent", label: "Sales Agent", icon: Phone },
+  { href: "/sites", label: "Generated Sites", icon: Globe2 },
+  { href: "/financials", label: "Financials", icon: DollarSign },
 ];
+
+function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  const { metrics } = useRevenueLoop();
+
+  return (
+    <nav className="space-y-0.5" aria-label="Main navigation">
+      {nav.map((item) => {
+        const Icon = item.icon;
+        const active =
+          item.href === "/dashboard"
+            ? pathname === "/dashboard"
+            : pathname.startsWith(item.href);
+        const showApprovalCount =
+          item.href === "/sales-agent" && metrics.awaitingApproval > 0;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] font-medium transition-colors duration-150",
+              active
+                ? "bg-emerald-400/10 text-emerald-300"
+                : "text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-100",
+            )}
+          >
+            <Icon size={15} aria-hidden />
+            <span className="flex-1">{item.label}</span>
+            {showApprovalCount ? (
+              <span className="rounded-full bg-amber-400/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-300">
+                {metrics.awaitingApproval}
+              </span>
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function SidebarFooter() {
+  const { state } = useRevenueLoop();
+  return (
+    <div className="mt-auto space-y-3 pt-6">
+      <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-zinc-400">Loop status</span>
+          <StatusDot
+            tone={
+              state.safetyLock
+                ? "red"
+                : state.agentStatus === "Running"
+                  ? "green"
+                  : state.agentStatus === "Awaiting Approval"
+                    ? "amber"
+                    : "muted"
+            }
+            pulse={state.agentStatus === "Running"}
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <Badge
+            tone={
+              state.safetyLock
+                ? "red"
+                : state.agentStatus === "Running"
+                  ? "green"
+                  : state.agentStatus === "Awaiting Approval"
+                    ? "amber"
+                    : "muted"
+            }
+          >
+            {state.safetyLock ? "Emergency stop" : state.agentStatus}
+          </Badge>
+          <Badge tone={state.settings.mode === "mock" ? "purple" : "blue"}>
+            {state.settings.mode === "mock" ? "Sandbox" : "Live"}
+          </Badge>
+        </div>
+      </div>
+      <p className="px-1 font-mono text-[10px] text-zinc-600">
+        ⌘K command palette
+      </p>
+    </div>
+  );
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { state } = useRevenueLoop();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
-  if (pathname.startsWith("/sites/")) {
-    return <>{children}</>;
+  // Full-bleed routes: generated site previews and the marketing landing page.
+  if (pathname.startsWith("/sites/") || pathname === "/") {
+    return (
+      <>
+        {children}
+        <CommandPalette />
+      </>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-[#080a0b] text-zinc-100">
-      <div className="pointer-events-none fixed inset-0 bg-[linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px)] bg-[size:48px_48px]" />
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(57,255,136,0.16),transparent_28%),radial-gradient(circle_at_82%_8%,rgba(96,165,250,0.13),transparent_24%)]" />
-      <div className="relative z-10 flex min-h-screen">
-        <aside className="hidden w-64 shrink-0 border-r border-white/10 bg-black/40 px-4 py-5 backdrop-blur md:block">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-lg border border-emerald-300/40 bg-emerald-300/10 text-emerald-200">
-              <Bot size={20} />
-            </span>
-            <span>
-              <span className="block text-lg font-bold tracking-tight text-white">
-                RevenueLoop
-              </span>
-              <span className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                Autonomous agency
-              </span>
-            </span>
+    <div className="min-h-screen bg-[#0a0a0c] text-zinc-100">
+      <div className="flex min-h-screen">
+        {/* Desktop sidebar */}
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-56 flex-col border-r border-white/[0.07] bg-[#0d0d10] px-3 py-4 lg:flex">
+          <Link href="/dashboard" className="px-1.5" aria-label="VentureMint home">
+            <VentureMintLogo showTagline />
           </Link>
-
-          <nav className="mt-9 space-y-1">
-            {nav.map((item) => {
-              const Icon = item.icon;
-              const active = pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition",
-                    active
-                      ? "bg-emerald-300/12 text-emerald-100"
-                      : "text-zinc-400 hover:bg-white/[0.06] hover:text-white",
-                  )}
-                >
-                  <Icon size={17} />
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="mt-8 rounded-lg border border-white/10 bg-white/[0.04] p-4">
-            <div className="flex items-center gap-2 text-sm font-semibold text-white">
-              <Activity size={16} className="text-emerald-300" />
-              Agent status
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Badge tone={state.agentStatus === "Running" ? "green" : "amber"}>
-                {state.agentStatus}
-              </Badge>
-              <Badge tone={state.settings.mode === "mock" ? "purple" : "blue"}>
-                {state.settings.mode === "mock" ? "Mock mode" : "Live mode"}
-              </Badge>
-            </div>
+          <div className="mt-6 flex-1 overflow-y-auto">
+            <NavLinks />
           </div>
+          <SidebarFooter />
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 border-b border-white/10 bg-[#080a0b]/86 px-4 py-3 backdrop-blur md:hidden">
-            <div className="flex items-center justify-between">
-              <Link href="/dashboard" className="flex items-center gap-2 font-bold">
-                <Globe2 size={18} className="text-emerald-300" />
-                RevenueLoop
-              </Link>
+        {/* Mobile drawer */}
+        {mobileOpen ? (
+          <div
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
+            onClick={() => setMobileOpen(false)}
+          >
+            <aside
+              className="flex h-full w-64 flex-col border-r border-white/[0.07] bg-[#0d0d10] px-3 py-4"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-1.5">
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMobileOpen(false)}
+                  aria-label="VentureMint home"
+                >
+                  <VentureMintLogo />
+                </Link>
+                <button
+                  onClick={() => setMobileOpen(false)}
+                  className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200"
+                  aria-label="Close navigation"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              <div className="mt-6 flex-1 overflow-y-auto">
+                <NavLinks onNavigate={() => setMobileOpen(false)} />
+              </div>
+              <SidebarFooter />
+            </aside>
+          </div>
+        ) : null}
+
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-56">
+          {/* Top bar */}
+          <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#0a0a0c]/90 backdrop-blur">
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setMobileOpen(true)}
+                  className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100 lg:hidden"
+                  aria-label="Open navigation"
+                >
+                  <Menu size={17} />
+                </button>
+                <div className="hidden items-center gap-2 sm:flex">
+                  <StatusDot
+                    tone={
+                      state.safetyLock
+                        ? "red"
+                        : state.agentStatus === "Running"
+                          ? "green"
+                          : state.agentStatus === "Awaiting Approval"
+                            ? "amber"
+                            : "muted"
+                    }
+                    pulse={state.agentStatus === "Running"}
+                  />
+                  <span className="text-xs text-zinc-400">
+                    {state.safetyLock
+                      ? "Emergency stop engaged"
+                      : state.agentStatus === "Running"
+                        ? "Loop running"
+                        : state.agentStatus === "Awaiting Approval"
+                          ? "Awaiting your approval"
+                          : state.agentStatus === "Paused"
+                            ? "Loop paused"
+                            : "Loop idle"}
+                  </span>
+                </div>
+              </div>
               <Badge tone={state.settings.mode === "mock" ? "purple" : "blue"}>
-                {state.settings.mode}
+                {state.settings.mode === "mock" ? "Sandbox" : "Live"}
               </Badge>
             </div>
-            <nav className="mt-3 flex gap-2 overflow-x-auto">
-              {nav.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="rounded-lg border border-white/10 px-3 py-2 text-xs text-zinc-300"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            {state.safetyLock ? (
+              <div className="border-t border-rose-500/20 bg-rose-500/10 px-4 py-1.5 sm:px-6">
+                <p className="flex items-center gap-2 text-[11px] font-medium text-rose-300">
+                  <OctagonX size={12} aria-hidden />
+                  Emergency stop engaged — all outbound actions and agent execution are
+                  blocked. Release the lock from the loop controls.
+                </p>
+              </div>
+            ) : null}
           </header>
-          <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+
+          <main className="mx-auto flex w-full max-w-[1440px] flex-1 flex-col px-4 py-5 sm:px-6">
             {children}
-          </div>
-        </main>
+          </main>
+        </div>
       </div>
+      <CommandPalette />
     </div>
   );
 }

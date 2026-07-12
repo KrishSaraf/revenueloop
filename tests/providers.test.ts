@@ -14,6 +14,8 @@ describe("mock providers", () => {
     });
 
     expect(result.data).toHaveLength(3);
+    expect(result.data[0]?.id).toBe("prospect-new-nature-spa");
+    expect(result.data[0]?.name).toBe("New Nature Spa");
     expect(result.logs.join(" ")).toContain("No real businesses");
   });
 

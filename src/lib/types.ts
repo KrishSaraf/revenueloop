@@ -62,8 +62,25 @@ export interface Prospect {
   paymentId?: string;
   approvedForCall: boolean;
   doNotContact: boolean;
+  identifiedGaps?: string[];
+  monthlyImpactLow?: number;
+  monthlyImpactHigh?: number;
+  suggestedMonthlyPrice?: number;
+  estimatedDeliveryCost?: number;
+  lostReason?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface EvidenceItem {
+  id: string;
+  prospectId: string;
+  claim: string;
+  source: string;
+  confidence: number;
+  verified: boolean;
+  capturedAt: string;
+  category: "presence" | "demand" | "contact" | "competition" | "inference";
 }
 
 export interface BusinessResearch {
@@ -108,6 +125,12 @@ export interface WebsiteSection {
     | "cta";
 }
 
+export interface VerificationCheck {
+  id: string;
+  label: string;
+  passed: boolean;
+}
+
 export interface GeneratedWebsite {
   id: string;
   prospectId: string;
@@ -120,6 +143,8 @@ export interface GeneratedWebsite {
   };
   sections: WebsiteSection[];
   missingInfo: string[];
+  verified: boolean;
+  verificationChecks: VerificationCheck[];
   published: boolean;
   createdAt: string;
   updatedAt: string;
@@ -199,10 +224,22 @@ export interface AgentRun {
   mode: IntegrationMode;
 }
 
+export type AgentName =
+  | "Discovery Agent"
+  | "Research Agent"
+  | "Scoring Agent"
+  | "Strategy Agent"
+  | "Build Agent"
+  | "Verification Agent"
+  | "Sales Agent"
+  | "Finance Agent"
+  | "System";
+
 export interface AgentEvent {
   id: string;
   timestamp: string;
   prospectId?: string;
+  agent?: AgentName;
   title: string;
   status: EventStatus;
   previousState?: AgentState;
@@ -234,6 +271,8 @@ export interface UserSettings {
   dataRetentionDays: number;
   requireHumanApproval: boolean;
   demoSpeed: number;
+  maxCallsPerDay: number;
+  allowedRegions: string[];
 }
 
 export interface DoNotContactEntry {
@@ -268,11 +307,13 @@ export interface RevenueLoopState {
   runs: AgentRun[];
   events: AgentEvent[];
   costs: OperatingCost[];
+  evidence: EvidenceItem[];
   settings: UserSettings;
   doNotContactEntries: DoNotContactEntry[];
   selectedProspectId?: string;
   agentStatus: AgentStatus;
   runningDemo: boolean;
+  safetyLock: boolean;
   lastUpdatedAt: string;
 }
 
@@ -295,9 +336,9 @@ export const stateLabels: Record<AgentState, string> = {
   PREPARING_PITCH: "Preparing pitch",
   AWAITING_APPROVAL: "Awaiting approval",
   CALLING: "Calling",
-  FOLLOWING_UP: "Following up",
+  FOLLOWING_UP: "Cold call done",
   PAYMENT_PENDING: "Payment pending",
-  WON: "Won",
+  WON: "Closed",
   FAILED: "Failed",
   PAUSED: "Paused",
   REJECTED: "Rejected",

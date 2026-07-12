@@ -27,28 +27,54 @@ function providerResult<T>(data: T, cost: number, logs: string[]): ProviderResul
   return { data, cost, logs };
 }
 
+const FLAGSHIP_ID = "prospect-new-nature-spa";
+
 export class MockBusinessSearchProvider implements BusinessSearchProvider {
   async search(input: BusinessSearchInput) {
-    const data = seededProspects
-      .filter((prospect) => {
-        const categoryMatches =
-          input.category === "Any" ||
-          prospect.category.toLowerCase().includes(input.category.toLowerCase());
-        const locationMatches =
-          input.location.trim().length === 0 ||
-          prospect.location.toLowerCase().includes(input.location.toLowerCase()) ||
-          prospect.address.toLowerCase().includes(input.location.toLowerCase());
-        const ratingMatches = prospect.rating >= input.minimumRating;
-        const websiteMatches =
-          input.websiteStatus === "either" ||
-          prospect.websiteStatus === input.websiteStatus;
+    const query = input.query?.trim().toLowerCase() ?? "";
 
-        return categoryMatches && locationMatches && ratingMatches && websiteMatches;
-      })
-      .slice(0, input.maxProspects);
+    let data = seededProspects.filter((prospect) => {
+      const categoryMatches =
+        input.category === "Any" ||
+        prospect.category.toLowerCase().includes(input.category.toLowerCase());
+      const locationMatches =
+        input.location.trim().length === 0 ||
+        prospect.location.toLowerCase().includes(input.location.toLowerCase()) ||
+        prospect.address.toLowerCase().includes(input.location.toLowerCase());
+      const ratingMatches = prospect.rating >= input.minimumRating;
+      const websiteMatches =
+        input.websiteStatus === "either" ||
+        prospect.websiteStatus === input.websiteStatus;
+      const queryMatches =
+        query.length === 0 ||
+        prospect.name.toLowerCase().includes(query) ||
+        prospect.category.toLowerCase().includes(query) ||
+        prospect.location.toLowerCase().includes(query);
+
+      return (
+        categoryMatches &&
+        locationMatches &&
+        ratingMatches &&
+        websiteMatches &&
+        queryMatches
+      );
+    });
+
+    data.sort((a, b) => {
+      if (a.id === FLAGSHIP_ID) return -1;
+      if (b.id === FLAGSHIP_ID) return 1;
+      return b.opportunityScore - a.opportunityScore;
+    });
+
+    const flagship = seededProspects.find((p) => p.id === FLAGSHIP_ID);
+    if (flagship && !data.some((p) => p.id === FLAGSHIP_ID)) {
+      data = [flagship, ...data];
+    }
+
+    data = data.slice(0, input.maxProspects);
 
     return providerResult(data, 0.04, [
-      "Mock Places search returned seeded Singapore SMBs.",
+      "Mock Places search returned local small businesses in Singapore.",
       "No real businesses were contacted or scraped.",
     ]);
   }

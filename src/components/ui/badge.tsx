@@ -4,12 +4,12 @@ import { cn } from "@/lib/utils";
 type BadgeTone = "green" | "blue" | "purple" | "amber" | "red" | "muted";
 
 const tones: Record<BadgeTone, string> = {
-  green: "border-emerald-300/30 bg-emerald-300/10 text-emerald-200",
-  blue: "border-sky-300/30 bg-sky-300/10 text-sky-200",
-  purple: "border-violet-300/30 bg-violet-300/10 text-violet-200",
-  amber: "border-amber-300/30 bg-amber-300/10 text-amber-200",
-  red: "border-rose-300/30 bg-rose-300/10 text-rose-200",
-  muted: "border-white/10 bg-white/[0.06] text-zinc-300",
+  green: "border-emerald-400/25 bg-emerald-400/10 text-emerald-300",
+  blue: "border-sky-400/25 bg-sky-400/10 text-sky-300",
+  purple: "border-violet-400/25 bg-violet-400/10 text-violet-300",
+  amber: "border-amber-400/25 bg-amber-400/10 text-amber-300",
+  red: "border-rose-400/25 bg-rose-400/10 text-rose-300",
+  muted: "border-white/10 bg-white/[0.05] text-zinc-400",
 };
 
 export function Badge({
@@ -24,12 +24,42 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium",
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap",
         tones[tone],
         className,
       )}
     >
       {children}
     </span>
+  );
+}
+
+export function StatusDot({
+  tone = "muted",
+  pulse = false,
+  className,
+}: {
+  tone?: BadgeTone;
+  pulse?: boolean;
+  className?: string;
+}) {
+  const colors: Record<BadgeTone, string> = {
+    green: "bg-emerald-400",
+    blue: "bg-sky-400",
+    purple: "bg-violet-400",
+    amber: "bg-amber-400",
+    red: "bg-rose-400",
+    muted: "bg-zinc-500",
+  };
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "inline-block h-1.5 w-1.5 shrink-0 rounded-full",
+        colors[tone],
+        pulse && "pulse-dot",
+        className,
+      )}
+    />
   );
 }

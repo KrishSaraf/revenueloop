@@ -1,276 +1,181 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Filter, Search, Sparkles } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ArrowRight, RefreshCw, SearchX, Store } from "lucide-react";
+import { Badge, StatusDot } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Panel, PanelHeader } from "@/components/ui/panel";
-import { ProgressRing } from "@/components/ui/progress-ring";
+import { EmptyState } from "@/components/ui/empty-state";
+import { CardSkeleton } from "@/components/ui/skeleton";
+import { stateTone } from "@/lib/presentation";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
+import { stateLabels } from "@/lib/types";
 import { currency } from "@/lib/utils";
 
+const FLAGSHIP_ID = "prospect-new-nature-spa";
+
+const discoveryInput = {
+  location: "Singapore",
+  category: "Any",
+  maxProspects: 12,
+  minimumRating: 3.0,
+  websiteStatus: "either" as const,
+};
+
+function sortProspects<T extends { id: string; opportunityScore: number }>(
+  items: T[],
+): T[] {
+  return [...items].sort((a, b) => {
+    if (a.id === FLAGSHIP_ID) return -1;
+    if (b.id === FLAGSHIP_ID) return 1;
+    return b.opportunityScore - a.opportunityScore;
+  });
+}
+
 export function ProspectsView() {
-  const { state, discoverProspects, generateWebsite, selectProspect } = useRevenueLoop();
+  const { state, discoverProspects, selectProspect, hydrated } = useRevenueLoop();
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [discoveryError, setDiscoveryError] = useState<string | null>(null);
-  const [location, setLocation] = useState("Singapore");
-  const [category, setCategory] = useState("Any");
-  const [maxProspects, setMaxProspects] = useState(5);
-  const [minimumRating, setMinimumRating] = useState(4.2);
-  const [websiteStatus, setWebsiteStatus] = useState<
-    "no_website" | "weak_website" | "either"
-  >("either");
-  const providerLabel =
-    state.settings.discoveryProvider === "google"
-      ? "Google Places"
-      : state.settings.discoveryProvider === "overpass"
-        ? "OpenStreetMap Overpass"
-        : "Mock provider";
+  const autoDiscoverRan = useRef(false);
+
+  const prospects = useMemo(
+    () => sortProspects(state.prospects),
+    [state.prospects],
+  );
+
+  const runDiscovery = useCallback(
+    async (replace = false) => {
+      setIsDiscovering(true);
+      setDiscoveryError(null);
+      try {
+        await discoverProspects({ ...discoveryInput, replace });
+      } catch (error) {
+        setDiscoveryError(
+          error instanceof Error ? error.message : "Discovery failed. Try again.",
+        );
+      } finally {
+        setIsDiscovering(false);
+      }
+    },
+    [discoverProspects],
+  );
+
+  useEffect(() => {
+    if (!hydrated || autoDiscoverRan.current || state.prospects.length > 0) return;
+    autoDiscoverRan.current = true;
+    void discoverProspects(discoveryInput).catch((error) => {
+      setDiscoveryError(
+        error instanceof Error ? error.message : "Discovery failed. Try again.",
+      );
+    });
+  }, [hydrated, discoverProspects, state.prospects.length]);
+
+  const waitingForFirstSweep =
+    hydrated && prospects.length === 0 && !discoveryError;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <Badge tone="blue">Lead discovery</Badge>
-          <h1 className="mt-3 text-3xl font-bold text-white">Prospects</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-400">
-            Find Singapore businesses where an owned website and enquiry flow can create measurable value.
+          <h1 className="text-xl font-semibold text-zinc-100">Prospects</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            {prospects.length > 0
+              ? `${prospects.length} local small businesses found — New Nature Spa is your top opportunity.`
+              : "Discovery agents scan neighbourhood small businesses across Singapore."}
           </p>
         </div>
+        <Button
+          variant="secondary"
+          icon={<RefreshCw size={15} className={isDiscovering ? "animate-spin" : ""} />}
+          disabled={isDiscovering || state.safetyLock}
+          onClick={() => void runDiscovery(true)}
+        >
+          {isDiscovering ? "Scanning…" : "Refresh"}
+        </Button>
       </div>
 
-      <Panel>
-        <PanelHeader title="Discovery Controls" eyebrow="search provider" />
-        <div className="grid gap-4 p-5 md:grid-cols-5">
-          <label className="space-y-2">
-            <span className="text-sm text-zinc-400">Location</span>
-            <input
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-              className="h-10 w-full rounded-lg border border-white/10 bg-black/28 px-3 text-sm text-white outline-none focus:border-emerald-300/50"
-            />
-          </label>
-          <label className="space-y-2">
-            <span className="text-sm text-zinc-400">Category</span>
-            <select
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              className="h-10 w-full rounded-lg border border-white/10 bg-black/28 px-3 text-sm text-white outline-none focus:border-emerald-300/50"
-            >
-              <option>Any</option>
-              <option>Salon</option>
-              <option>Tuition centre</option>
-              <option>Bicycle repair shop</option>
-              <option>Independent wellness studio</option>
-              <option>Cafe</option>
-            </select>
-          </label>
-          <label className="space-y-2">
-            <span className="text-sm text-zinc-400">Max prospects</span>
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={maxProspects}
-              onChange={(event) => setMaxProspects(Number(event.target.value))}
-              className="h-10 w-full rounded-lg border border-white/10 bg-black/28 px-3 text-sm text-white outline-none focus:border-emerald-300/50"
-            />
-          </label>
-          <label className="space-y-2">
-            <span className="text-sm text-zinc-400">Minimum rating</span>
-            <input
-              type="number"
-              min={0}
-              max={5}
-              step={0.1}
-              value={minimumRating}
-              onChange={(event) => setMinimumRating(Number(event.target.value))}
-              className="h-10 w-full rounded-lg border border-white/10 bg-black/28 px-3 text-sm text-white outline-none focus:border-emerald-300/50"
-            />
-          </label>
-          <label className="space-y-2">
-            <span className="text-sm text-zinc-400">Website status</span>
-            <select
-              value={websiteStatus}
-              onChange={(event) =>
-                setWebsiteStatus(event.target.value as typeof websiteStatus)
-              }
-              className="h-10 w-full rounded-lg border border-white/10 bg-black/28 px-3 text-sm text-white outline-none focus:border-emerald-300/50"
-            >
-              <option value="either">Either</option>
-              <option value="no_website">No website</option>
-              <option value="weak_website">Weak website</option>
-            </select>
-          </label>
-          <div className="md:col-span-5">
-            <Button
-              variant="primary"
-              icon={<Search size={16} />}
-              disabled={isDiscovering}
-              onClick={async () => {
-                setIsDiscovering(true);
-                setDiscoveryError(null);
-                try {
-                  await discoverProspects({
-                    location,
-                    category,
-                    maxProspects,
-                    minimumRating,
-                    websiteStatus,
-                  });
-                } catch (error) {
-                  setDiscoveryError(
-                    error instanceof Error
-                      ? error.message
-                      : "Prospect discovery failed.",
-                  );
-                } finally {
-                  setIsDiscovering(false);
-                }
-              }}
-            >
-              {isDiscovering ? "Discovering..." : "Start discovery"}
-            </Button>
-            <Badge
-              tone={
-                state.settings.discoveryProvider === "overpass"
-                  ? "green"
-                  : state.settings.discoveryProvider === "google"
-                    ? "blue"
-                    : "purple"
-              }
-              className="ml-3"
-            >
-              {providerLabel}
-            </Badge>
-            {discoveryError ? (
-              <p className="mt-3 rounded-lg border border-rose-300/20 bg-rose-300/10 p-3 text-sm text-rose-100">
-                {discoveryError}
-              </p>
-            ) : null}
-          </div>
+      {isDiscovering || waitingForFirstSweep ? (
+        <div className="flex items-center gap-2 text-xs text-zinc-500">
+          <StatusDot tone="blue" pulse />
+          Discovery Agent is scanning local small businesses…
         </div>
-      </Panel>
-
-      {state.prospects.length === 0 ? (
-        <Panel className="p-8 text-center">
-          <p className="text-lg font-semibold text-white">No prospects found</p>
-          <p className="mt-2 text-sm text-zinc-500">
-            Try a broader category, lower minimum rating, or switch website status to either.
-          </p>
-        </Panel>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {state.prospects.map((prospect) => (
-          <article
-            key={prospect.id}
-            className="rounded-lg border border-white/10 bg-[#101214]/86 p-5"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap gap-2">
-                  <Badge tone="muted">{prospect.category}</Badge>
-                  <Badge
-                    tone={
-                      prospect.websiteStatus === "no_website"
-                        ? "green"
-                        : prospect.websiteStatus === "weak_website"
-                          ? "amber"
-                          : "blue"
-                    }
-                  >
-                    {prospect.websiteStatus === "no_website"
-                      ? "No website"
-                      : prospect.websiteStatus === "weak_website"
-                        ? "Weak website"
-                        : "Healthy website"}
-                  </Badge>
-                </div>
-                <h2 className="mt-3 text-xl font-semibold text-white">
-                  {prospect.name}
-                </h2>
-                <p className="mt-1 text-sm text-zinc-400">{prospect.address}</p>
-              </div>
-              <div className="relative grid place-items-center">
-                <ProgressRing value={prospect.opportunityScore} />
-                <span className="absolute text-sm font-bold text-white">
-                  {prospect.opportunityScore}
-                </span>
-              </div>
-            </div>
+      {discoveryError ? (
+        <p className="rounded-lg border border-rose-400/20 bg-rose-400/[0.06] px-4 py-3 text-xs text-rose-300">
+          {discoveryError}
+        </p>
+      ) : null}
 
-            <div className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-              <div className="rounded-lg bg-white/[0.05] p-3">
-                <p className="text-zinc-500">Rating</p>
-                <p className="mt-1 font-semibold text-white">
-                  {prospect.rating} · {prospect.reviewCount} reviews
-                </p>
-              </div>
-              <div className="rounded-lg bg-white/[0.05] p-3">
-                <p className="text-zinc-500">Phone</p>
-                <p className="mt-1 font-semibold text-white">{prospect.phone}</p>
-              </div>
-              <div className="rounded-lg bg-white/[0.05] p-3">
-                <p className="text-zinc-500">Deal value</p>
-                <p className="mt-1 font-semibold text-white">
-                  {currency(prospect.estimatedDealValue)}
-                </p>
-              </div>
-            </div>
-
-            <p className="mt-4 text-sm leading-6 text-zinc-300">
-              {prospect.whyGoodProspect}
-            </p>
-            <p className="mt-2 text-xs text-zinc-500">
-              AI-inferred: {prospect.onlineBookingValue}
-            </p>
-            {prospect.currentWebsiteUrl ? (
-              <a
-                href={prospect.currentWebsiteUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 block truncate text-xs text-sky-200 hover:text-sky-100"
-              >
-                Existing website: {prospect.currentWebsiteUrl}
-              </a>
-            ) : null}
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              <Link href={`/prospects/${prospect.id}`} onClick={() => selectProspect(prospect.id)}>
-                <Button icon={<ArrowRight size={16} />}>Open workspace</Button>
-              </Link>
-              <Button
-                variant="ghost"
-                icon={<Sparkles size={16} />}
-                onClick={() => generateWebsite(prospect.id)}
-              >
-                Generate website
-              </Button>
-              <Badge tone="purple" className="ml-auto">
-                {prospect.status}
-              </Badge>
-            </div>
-          </article>
-        ))}
-      </div>
-
-      <Panel>
-        <PanelHeader
-          title="Scoring Inputs"
-          eyebrow="transparent ranking"
-          action={<Filter size={18} className="text-emerald-300" />}
-        />
-        <div className="grid gap-3 p-5 text-sm text-zinc-300 md:grid-cols-3">
-          <p>No or weak website presence.</p>
-          <p>Strong rating and review count.</p>
-          <p>Public information is available for a useful draft.</p>
-          <p>Booking or enquiry flow would create value.</p>
-          <p>Social-only presence leaves an owned-channel gap.</p>
-          <p>Category has local search intent.</p>
+      {!hydrated || isDiscovering || waitingForFirstSweep ? (
+        <div className="space-y-2">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <CardSkeleton key={index} />
+          ))}
         </div>
-      </Panel>
+      ) : prospects.length === 0 ? (
+        <EmptyState
+          icon={SearchX}
+          title="No small businesses found"
+          description="The discovery sweep returned no results. Hit Refresh to scan again."
+        />
+      ) : (
+        <div className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.08]">
+          {prospects.map((prospect, index) => {
+            const gap = (prospect.identifiedGaps ?? [])[0] ?? prospect.summary;
+            const isFlagship = prospect.id === FLAGSHIP_ID;
+            return (
+              <article
+                key={prospect.id}
+                className={`flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5 ${
+                  isFlagship ? "bg-emerald-400/[0.06]" : "bg-[#111114]"
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[10px] text-zinc-600">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <Link
+                      href={`/prospects/${prospect.id}`}
+                      onClick={() => selectProspect(prospect.id)}
+                      className="text-sm font-semibold text-zinc-100 underline-offset-2 hover:underline"
+                    >
+                      {prospect.name}
+                    </Link>
+                    <Badge tone="muted" className="gap-1">
+                      <Store size={10} aria-hidden />
+                      Small business
+                    </Badge>
+                    {isFlagship ? (
+                      <Badge tone="green">Top opportunity</Badge>
+                    ) : null}
+                    <Badge tone={stateTone[prospect.agentState]}>
+                      {stateLabels[prospect.agentState]}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {prospect.category} · {prospect.location} ·{" "}
+                    {prospect.reviewCount} reviews ·{" "}
+                    {currency(prospect.estimatedDealValue)} est. deal
+                  </p>
+                  <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-400">
+                    {gap}
+                  </p>
+                </div>
+                <Link
+                  href={`/prospects/${prospect.id}`}
+                  onClick={() => selectProspect(prospect.id)}
+                >
+                  <Button size="sm" icon={<ArrowRight size={13} />}>
+                    Open
+                  </Button>
+                </Link>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

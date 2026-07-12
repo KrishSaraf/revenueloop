@@ -18,21 +18,24 @@ import type {
   Offer,
   Prospect,
   RevenueLoopState,
+  UserSettings,
 } from "@/lib/types";
 import { calculateMetrics } from "@/lib/revenue";
 import {
+  createEvidenceForProspect,
   createInitialState,
   createResearchForProspect,
   createSalesStrategyForProspect,
   createScoreForProspect,
   createWebsiteForProspect,
+  getDiscoveryWave,
   seededProspects,
 } from "@/lib/seed";
 import { assertCanPlaceCall, transitionAgentState } from "@/lib/agent/state-machine";
 import { nowIso } from "@/lib/utils";
 import type { DiscoveryRequest } from "@/lib/validation/discovery";
 
-const STORAGE_KEY = "revenueloop-state-v1";
+const STORAGE_KEY = "venturemint-state-v4";
 
 type DiscoveryInput = DiscoveryRequest;
 
@@ -49,12 +52,18 @@ interface DiscoveryResponse {
 interface RevenueLoopContextValue {
   state: RevenueLoopState;
   metrics: ReturnType<typeof calculateMetrics>;
+  hydrated: boolean;
   resetDemo: () => void;
   runDemo: (speed?: number) => Promise<void>;
   pauseAgent: () => void;
+  resumeAgent: () => void;
+  emergencyStop: () => void;
+  releaseSafetyLock: () => void;
   discoverProspects: (input: DiscoveryInput) => Promise<void>;
+  discoverNextWave: () => number;
   generateWebsite: (prospectId: string) => void;
   approveCall: (prospectId: string) => Promise<void>;
+  rejectProspect: (prospectId: string, reason: string) => void;
   markDoNotContact: (prospectId: string, reason: string) => void;
   updateWebsiteSection: (
     websiteId: string,
@@ -64,6 +73,7 @@ interface RevenueLoopContextValue {
   updateWebsiteTheme: (websiteId: string, style: GeneratedWebsite["theme"]["style"]) => void;
   publishWebsite: (websiteId: string) => void;
   selectProspect: (prospectId: string) => void;
+  updateSettings: (patch: Partial<UserSettings>) => void;
 }
 
 const RevenueLoopContext = createContext<RevenueLoopContextValue | undefined>(
@@ -88,12 +98,12 @@ function createEvent(input: Partial<AgentEvent> & Pick<AgentEvent, "title" | "ne
 }
 
 function pushEvent(state: RevenueLoopState, event: AgentEvent) {
-  state.events = [event, ...state.events].slice(0, 80);
+  state.events = [event, ...state.events].slice(0, 120);
   if (event.estimatedCost > 0) {
     state.costs = [
       {
         id: `cost-${crypto.randomUUID()}`,
-        provider: event.title.includes("call") ? "ElevenLabs" : "Agent",
+        provider: event.title.toLowerCase().includes("call") ? "Voice" : "Agent",
         action: event.title,
         amount: event.estimatedCost,
         prospectId: event.prospectId,
@@ -149,7 +159,7 @@ function makeTranscript(callId: string, prospect: Prospect): CallTranscriptEntry
       id: `${callId}-ai-1`,
       callId,
       speaker: "ai",
-      text: `Hi, this is RevenueLoop's AI assistant. I prepared a private website preview for ${prospect.name}. Do you have 30 seconds?`,
+      text: `Hi, this is VentureMint's AI assistant. I prepared a private website preview for ${prospect.name}. Do you have 30 seconds?`,
       timestamp,
       sentiment: "neutral",
     },
@@ -181,7 +191,7 @@ function makeTranscript(callId: string, prospect: Prospect): CallTranscriptEntry
       id: `${callId}-ai-3`,
       callId,
       speaker: "ai",
-      text: `The setup is S$${prospect.estimatedDealValue}, then S$79 per month for hosting and light edits. I can send the preview and checkout link for approval.`,
+      text: `The setup is S$${prospect.estimatedDealValue}, then S$${prospect.suggestedMonthlyPrice || 49} per month for hosting and light edits. I can send the preview and checkout link for approval.`,
       timestamp,
       sentiment: "neutral",
     },
@@ -226,6 +236,7 @@ function completeCall(call: Call): Call {
 
 export function RevenueLoopProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<RevenueLoopState>(() => createInitialState());
+  const [hydrated, setHydrated] = useState(false);
   const stateRef = useRef(state);
   const storageReadyRef = useRef(false);
 
@@ -235,13 +246,17 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
       try {
         const stored = window.localStorage.getItem(STORAGE_KEY);
         if (stored) {
-          nextState = JSON.parse(stored) as RevenueLoopState;
+          const parsed = JSON.parse(stored) as RevenueLoopState;
+          if (Array.isArray(parsed.evidence) && parsed.settings?.allowedRegions) {
+            nextState = parsed;
+          }
         }
       } catch {
         nextState = createInitialState();
       }
       storageReadyRef.current = true;
       setState(nextState);
+      setHydrated(true);
     }, 0);
 
     return () => window.clearTimeout(id);
@@ -273,6 +288,14 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
     [mutate],
   );
 
+  const updateSettings = useCallback(
+    (patch: Partial<UserSettings>) =>
+      mutate((draft) => {
+        draft.settings = { ...draft.settings, ...patch };
+      }),
+    [mutate],
+  );
+
   const pauseAgent = useCallback(() => {
     mutate((draft) => {
       draft.agentStatus = "Paused";
@@ -280,12 +303,68 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
       pushEvent(
         draft,
         createEvent({
-          title: "Agent paused",
+          title: "Loop paused",
           status: "pending",
+          agent: "System",
           previousState: draft.runs[0]?.currentState,
           newState: "PAUSED",
-          inputSummary: "Operator pressed Pause Agent.",
+          inputSummary: "Operator paused the loop.",
           outputSummary: "No external action will run while paused.",
+        }),
+      );
+    });
+  }, [mutate]);
+
+  const resumeAgent = useCallback(() => {
+    mutate((draft) => {
+      if (draft.safetyLock) return;
+      draft.agentStatus = "Running";
+      pushEvent(
+        draft,
+        createEvent({
+          title: "Loop resumed",
+          status: "complete",
+          agent: "System",
+          newState: "DISCOVERING",
+          inputSummary: "Operator resumed the loop.",
+          outputSummary: "Agents may continue processing the pipeline.",
+        }),
+      );
+    });
+  }, [mutate]);
+
+  const emergencyStop = useCallback(() => {
+    mutate((draft) => {
+      draft.safetyLock = true;
+      draft.agentStatus = "Paused";
+      draft.runningDemo = false;
+      pushEvent(
+        draft,
+        createEvent({
+          title: "Emergency stop engaged",
+          status: "failed",
+          agent: "System",
+          newState: "PAUSED",
+          inputSummary: "Operator triggered the emergency stop.",
+          outputSummary:
+            "Calls, messages, payments, publishing and agent execution are blocked until the lock is released.",
+        }),
+      );
+    });
+  }, [mutate]);
+
+  const releaseSafetyLock = useCallback(() => {
+    mutate((draft) => {
+      draft.safetyLock = false;
+      pushEvent(
+        draft,
+        createEvent({
+          title: "Safety lock released",
+          status: "complete",
+          agent: "System",
+          newState: "PAUSED",
+          inputSummary: "Operator released the emergency stop.",
+          outputSummary: "The loop remains paused until explicitly resumed.",
         }),
       );
     });
@@ -293,6 +372,9 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
 
   const discoverProspects = useCallback(
     async (input: DiscoveryInput) => {
+      if (stateRef.current.safetyLock) {
+        throw new Error("Emergency stop is engaged. Release the safety lock first.");
+      }
       mutate((draft) => {
         draft.agentStatus = "Running";
         pushEvent(
@@ -300,9 +382,12 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           createEvent({
             title: "Scanning Singapore businesses",
             status: "running",
+            agent: "Discovery Agent",
             newState: "DISCOVERING",
-            inputSummary: `${input.category} around ${input.location || "Singapore"}.`,
-            outputSummary: "Prospect Finder Agent is querying the configured search provider.",
+            inputSummary: input.query
+              ? `Search: "${input.query}" in ${input.location || "Singapore"}.`
+              : `${input.category} around ${input.location || "Singapore"}.`,
+            outputSummary: "Discovery Agent is querying the configured search provider.",
           }),
         );
       });
@@ -328,9 +413,23 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         const providerSummary = `${payload.providerName ?? "Search provider"}: ${discoverySummary}`;
 
         mutate((draft) => {
-          draft.prospects = discoveredProspects;
-          draft.selectedProspectId = discoveredProspects[0]?.id;
-          draft.settings.mode = payload.providerMode === "mock" ? "mock" : "live";
+          if (input.replace) {
+            draft.prospects = discoveredProspects;
+            draft.evidence = discoveredProspects.flatMap((p) =>
+              createEvidenceForProspect(p),
+            );
+          } else {
+            const existingIds = new Set(draft.prospects.map((p) => p.id));
+            const fresh = discoveredProspects.filter((p) => !existingIds.has(p.id));
+            draft.prospects = [...fresh, ...draft.prospects];
+            for (const p of fresh) {
+              draft.evidence.push(...createEvidenceForProspect(p));
+            }
+          }
+          draft.selectedProspectId =
+            discoveredProspects.find((p) => p.id === "prospect-new-nature-spa")?.id ??
+            discoveredProspects[0]?.id ??
+            draft.selectedProspectId;
           draft.settings.discoveryProvider =
             payload.providerName === "Google Places"
               ? "google"
@@ -343,8 +442,11 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
             createEvent({
               title: "Prospects discovered",
               status: "complete",
+              agent: "Discovery Agent",
               newState: "DISCOVERING",
-              inputSummary: `${input.category} around ${input.location || "Singapore"}.`,
+              inputSummary: input.query
+              ? `Search: "${input.query}" in ${input.location || "Singapore"}.`
+              : `${input.category} around ${input.location || "Singapore"}.`,
               outputSummary: providerSummary,
               estimatedCost: payload.cost ?? 0,
             }),
@@ -358,12 +460,15 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
             createEvent({
               title: "Prospect discovery failed",
               status: "failed",
+              agent: "Discovery Agent",
               newState: "FAILED",
-              inputSummary: `${input.category} around ${input.location || "Singapore"}.`,
+              inputSummary: input.query
+              ? `Search: "${input.query}" in ${input.location || "Singapore"}.`
+              : `${input.category} around ${input.location || "Singapore"}.`,
               outputSummary:
                 error instanceof Error
                   ? error.message
-                  : "Prospect Finder Agent failed.",
+                  : "Discovery Agent failed.",
               error: error instanceof Error ? error.message : "Unknown error",
               retryStatus: "failed",
             }),
@@ -375,11 +480,42 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
     [mutate],
   );
 
+  const discoverNextWave = useCallback(() => {
+    if (stateRef.current.safetyLock) return 0;
+
+    const wave = getDiscoveryWave(stateRef.current.prospects.map((p) => p.id));
+    if (wave.length === 0) return 0;
+
+    mutate((draft) => {
+      draft.prospects = [...wave, ...draft.prospects];
+      for (const prospect of wave) {
+        draft.evidence.push(...createEvidenceForProspect(prospect));
+      }
+      draft.selectedProspectId = wave[0]?.id ?? draft.selectedProspectId;
+      draft.agentStatus = "Idle";
+      pushEvent(
+        draft,
+        createEvent({
+          title: "Venture Agent surfaced new leads",
+          status: "complete",
+          agent: "Discovery Agent",
+          newState: "DISCOVERING",
+          inputSummary: "Orchestrated sweep across Singapore neighbourhoods.",
+          outputSummary: `${wave.map((p) => p.name).join(", ")} added to pipeline.`,
+          estimatedCost: 0.06,
+        }),
+      );
+    });
+
+    return wave.length;
+  }, [mutate]);
+
   const generateWebsite = useCallback(
     (prospectId: string) => {
+      if (stateRef.current.safetyLock) return;
       mutate((draft) => {
         const prospect = draft.prospects.find((item) => item.id === prospectId);
-        if (!prospect) return;
+        if (!prospect || prospect.doNotContact) return;
 
         const research = createResearchForProspect(prospect);
         const score = createScoreForProspect(prospect);
@@ -412,13 +548,15 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         pushEvent(
           draft,
           createEvent({
-            title: "Website generated",
+            title: "Solution built and verified",
             status: "approval",
+            agent: "Build Agent",
             prospectId,
             previousState: "GENERATING_SITE",
             newState: "AWAITING_APPROVAL",
-            inputSummary: "Public listing data and opportunity score.",
-            outputSummary: "Preview site, sales strategy and approval gate are ready.",
+            inputSummary: "Public listing data, evidence and opportunity score.",
+            outputSummary:
+              "Preview site passed verification. Sales package prepared. Awaiting human approval.",
             estimatedCost: 0.29,
           }),
         );
@@ -429,6 +567,9 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
 
   const approveCall = useCallback(
     async (prospectId: string) => {
+      if (stateRef.current.safetyLock) {
+        throw new Error("Emergency stop is engaged. No calls can be placed.");
+      }
       const prospect = stateRef.current.prospects.find((item) => item.id === prospectId);
       if (!prospect) return;
 
@@ -443,6 +584,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           createEvent({
             title: "Human approval granted",
             status: "complete",
+            agent: "System",
             prospectId,
             previousState: "AWAITING_APPROVAL",
             newState: "CALLING",
@@ -474,8 +616,9 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         pushEvent(
           draft,
           createEvent({
-            title: "AI call started",
+            title: "Simulated call started",
             status: "running",
+            agent: "Sales Agent",
             prospectId,
             previousState: "AWAITING_APPROVAL",
             newState: "CALLING",
@@ -506,11 +649,38 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           createEvent({
             title: "Owner expressed interest",
             status: "complete",
+            agent: "Sales Agent",
             prospectId,
             previousState: "CALLING",
             newState: "PAYMENT_PENDING",
             inputSummary: "Simulated transcript completed.",
             outputSummary: "Prospect requested the preview and checkout link.",
+          }),
+        );
+      });
+    },
+    [mutate],
+  );
+
+  const rejectProspect = useCallback(
+    (prospectId: string, reason: string) => {
+      mutate((draft) => {
+        updateProspect(draft, prospectId, {
+          agentState: "REJECTED",
+          status: "Rejected",
+          lostReason: reason,
+        });
+        pushEvent(
+          draft,
+          createEvent({
+            title: "Opportunity rejected",
+            status: "complete",
+            agent: "System",
+            prospectId,
+            previousState: "AWAITING_APPROVAL",
+            newState: "REJECTED",
+            inputSummary: reason,
+            outputSummary: "Rejection reason recorded. No outreach will occur.",
           }),
         );
       });
@@ -540,6 +710,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           createEvent({
             title: "Do Not Contact honoured",
             status: "complete",
+            agent: "System",
             prospectId,
             previousState: "AWAITING_APPROVAL",
             newState: "DO_NOT_CONTACT",
@@ -573,7 +744,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
 
   const updateWebsiteTheme = useCallback(
     (websiteId: string, style: GeneratedWebsite["theme"]["style"]) => {
-      const accent = style === "emerald" ? "#39ff88" : style === "indigo" ? "#7c8cff" : "#ffc857";
+      const accent = style === "emerald" ? "#10b981" : style === "indigo" ? "#6366f1" : "#f59e0b";
       mutate((draft) => {
         draft.websites = draft.websites.map((website) =>
           website.id === websiteId
@@ -587,6 +758,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
 
   const publishWebsite = useCallback(
     (websiteId: string) => {
+      if (stateRef.current.safetyLock) return;
       mutate((draft) => {
         draft.websites = draft.websites.map((website) =>
           website.id === websiteId
@@ -597,12 +769,13 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         pushEvent(
           draft,
           createEvent({
-            title: "Demo site published",
+            title: "Preview site published",
             status: "complete",
+            agent: "Build Agent",
             prospectId: website?.prospectId,
             previousState: "AWAITING_APPROVAL",
             newState: "AWAITING_APPROVAL",
-            inputSummary: "Operator published the preview site in demo mode.",
+            inputSummary: "Operator published the preview site.",
             outputSummary: website ? `/sites/${website.slug}` : "Preview URL unavailable.",
           }),
         );
@@ -614,15 +787,19 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
   const runDemo = useCallback(
     async (speed = stateRef.current.settings.demoSpeed) => {
       if (stateRef.current.runningDemo) return;
+      if (stateRef.current.safetyLock) return;
+
+      const target = seededProspects[0]; // New Nature Spa
 
       setState({
         ...createInitialState(),
+        prospects: [{ ...target }],
+        evidence: createEvidenceForProspect(target),
+        selectedProspectId: target.id,
         runningDemo: true,
         agentStatus: "Running",
         settings: { ...createInitialState().settings, demoSpeed: speed },
       });
-
-      const target = seededProspects[0];
       const wait = (ms: number) =>
         new Promise((resolve) => setTimeout(resolve, Math.max(120, ms / speed)));
       const addStep = async (
@@ -639,10 +816,11 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
 
       await addStep(
         {
-          title: "Scanning Singapore businesses",
+          title: "Scanning Pandan Gardens businesses",
           status: "running",
+          agent: "Discovery Agent",
           newState: "DISCOVERING",
-          inputSummary: "Category sweep across salons, cafes, tutors and repair shops.",
+          inputSummary: "Category sweep across salons, cafes, clinics and studios.",
           outputSummary: "Found businesses with weak or missing website signals.",
           estimatedCost: 0.04,
         },
@@ -654,10 +832,11 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         {
           title: "Prospect discovered",
           status: "complete",
+          agent: "Discovery Agent",
           prospectId: target.id,
           previousState: "DISCOVERING",
           newState: "RESEARCHING",
-          inputSummary: "Mock Places result matched high rating and no website.",
+          inputSummary: "Listing matched: 3.0 stars, 2 Google reviews, no website on Google Maps.",
           outputSummary: `${target.name} selected as the highest-value lead.`,
         },
         (draft) => {
@@ -672,8 +851,9 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
       const research = createResearchForProspect(target);
       await addStep(
         {
-          title: "Online presence analysed",
+          title: "Digital presence analysed",
           status: "complete",
+          agent: "Research Agent",
           prospectId: target.id,
           previousState: "RESEARCHING",
           newState: "SCORING",
@@ -682,7 +862,10 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           estimatedCost: 0.08,
         },
         (draft) => {
-          draft.research = [research];
+          draft.research = [
+            research,
+            ...draft.research.filter((r) => r.prospectId !== target.id),
+          ];
           updateProspect(draft, target.id, {
             agentState: transitionAgentState("RESEARCHING", "SCORING"),
           });
@@ -692,8 +875,9 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
       const score = createScoreForProspect(target);
       await addStep(
         {
-          title: "Opportunity score calculated",
+          title: "Opportunity scored",
           status: "complete",
+          agent: "Scoring Agent",
           prospectId: target.id,
           previousState: "SCORING",
           newState: "GENERATING_SITE",
@@ -702,7 +886,10 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           estimatedCost: 0.03,
         },
         (draft) => {
-          draft.scores = [score];
+          draft.scores = [
+            score,
+            ...draft.scores.filter((s) => s.prospectId !== target.id),
+          ];
           updateProspect(draft, target.id, {
             opportunityScore: score.score,
             agentState: transitionAgentState("SCORING", "GENERATING_SITE"),
@@ -710,17 +897,33 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         },
       );
 
+      await addStep(
+        {
+          title: "Building booking-first site",
+          status: "running",
+          agent: "Build Agent",
+          prospectId: target.id,
+          newState: "GENERATING_SITE",
+          inputSummary: "Research summary and verified evidence.",
+          outputSummary: "Assembling mobile-first booking page with service catalogue.",
+          estimatedCost: 0.12,
+        },
+        undefined,
+        5500,
+      );
+
       const website = createWebsiteForProspect(target);
       await addStep(
         {
-          title: "Website generated",
+          title: "Website generated and verified",
           status: "complete",
+          agent: "Verification Agent",
           prospectId: target.id,
           previousState: "GENERATING_SITE",
           newState: "PREPARING_PITCH",
-          inputSummary: "Public facts and editable placeholders.",
-          outputSummary: `Preview generated at /sites/${website.slug}.`,
-          estimatedCost: 0.18,
+          inputSummary: "Generated preview site.",
+          outputSummary: `All verification checks passed. Preview at /sites/${website.slug}.`,
+          estimatedCost: 0.06,
         },
         (draft) => {
           upsertWebsite(draft, website);
@@ -736,17 +939,21 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
       const strategy = createSalesStrategyForProspect(target);
       await addStep(
         {
-          title: "Sales strategy prepared",
+          title: "Sales package prepared",
           status: "complete",
+          agent: "Strategy Agent",
           prospectId: target.id,
           previousState: "PREPARING_PITCH",
           newState: "AWAITING_APPROVAL",
           inputSummary: "Generated opening, value proposition and objection handling.",
-          outputSummary: `Approval required before simulated ElevenLabs call. Conversion estimate ${Math.round(strategy.conversionProbability * 100)}%.`,
+          outputSummary: `Approval required before simulated call. Conversion estimate ${Math.round(strategy.conversionProbability * 100)}%.`,
           estimatedCost: 0.11,
         },
         (draft) => {
-          draft.strategies = [strategy];
+          draft.strategies = [
+            strategy,
+            ...draft.strategies.filter((s) => s.prospectId !== target.id),
+          ];
           draft.agentStatus = "Awaiting Approval";
           updateProspect(draft, target.id, {
             salesStrategyId: strategy.id,
@@ -761,11 +968,12 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         {
           title: "Human approval requested",
           status: "approval",
+          agent: "System",
           prospectId: target.id,
           previousState: "PREPARING_PITCH",
           newState: "AWAITING_APPROVAL",
           inputSummary: "External action gate reached.",
-          outputSummary: "Demo operator approves the call after reviewing the pitch.",
+          outputSummary: "Operator approves the call after reviewing the pitch.",
         },
         undefined,
         5000,
@@ -800,6 +1008,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         {
           title: "Checkout link generated",
           status: "complete",
+          agent: "Finance Agent",
           prospectId: target.id,
           previousState: "FOLLOWING_UP",
           newState: "PAYMENT_PENDING",
@@ -808,8 +1017,14 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           estimatedCost: 0.06,
         },
         (draft) => {
-          draft.offers = [offer];
-          draft.payments = [{ ...payment, status: "Pending", paidAt: undefined }];
+          draft.offers = [
+            offer,
+            ...draft.offers.filter((o) => o.prospectId !== target.id),
+          ];
+          draft.payments = [
+            { ...payment, status: "Pending", paidAt: undefined },
+            ...draft.payments.filter((p) => p.prospectId !== target.id),
+          ];
           updateProspect(draft, target.id, {
             paymentId: payment.id,
             status: "Negotiating",
@@ -823,6 +1038,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         {
           title: "Payment received",
           status: "complete",
+          agent: "Finance Agent",
           prospectId: target.id,
           previousState: "PAYMENT_PENDING",
           newState: "WON",
@@ -830,7 +1046,10 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           outputSummary: `S$${payment.amount} setup revenue booked and profit updated.`,
         },
         (draft) => {
-          draft.payments = [payment];
+          draft.payments = [
+            payment,
+            ...draft.payments.filter((p) => p.prospectId !== target.id),
+          ];
           updateProspect(draft, target.id, {
             status: "Won",
             agentState: transitionAgentState("PAYMENT_PENDING", "WON"),
@@ -843,13 +1062,17 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         {
           title: "Next cycle funded",
           status: "complete",
+          agent: "Finance Agent",
           newState: "DISCOVERING",
           inputSummary: "Profit allocation engine calculated next-cycle budget.",
           outputSummary:
-            "RevenueLoop can reinvest part of the profit into the next prospecting cycle.",
+            "VentureMint reinvests part of the profit into the next prospecting cycle.",
         },
         (draft) => {
-          const next = draft.prospects.find((prospect) => prospect.id !== target.id);
+          const next = draft.prospects.find(
+            (prospect) =>
+              prospect.id !== target.id && prospect.agentState === "DISCOVERING",
+          );
           if (next) {
             draft.selectedProspectId = next.id;
             updateProspect(draft, next.id, {
@@ -876,32 +1099,46 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
     () => ({
       state,
       metrics,
+      hydrated,
       resetDemo,
       runDemo,
       pauseAgent,
+      resumeAgent,
+      emergencyStop,
+      releaseSafetyLock,
       discoverProspects,
+      discoverNextWave,
       generateWebsite,
       approveCall,
+      rejectProspect,
       markDoNotContact,
       updateWebsiteSection,
       updateWebsiteTheme,
       publishWebsite,
       selectProspect,
+      updateSettings,
     }),
     [
       state,
       metrics,
+      hydrated,
       resetDemo,
       runDemo,
       pauseAgent,
+      resumeAgent,
+      emergencyStop,
+      releaseSafetyLock,
       discoverProspects,
+      discoverNextWave,
       generateWebsite,
       approveCall,
+      rejectProspect,
       markDoNotContact,
       updateWebsiteSection,
       updateWebsiteTheme,
       publishWebsite,
       selectProspect,
+      updateSettings,
     ],
   );
 

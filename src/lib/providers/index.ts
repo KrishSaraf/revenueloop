@@ -15,9 +15,12 @@ export function createProviders() {
   const mockProviders = createMockProviders();
 
   return {
-    businessSearch: env.GOOGLE_PLACES_API_KEY
-      ? new GooglePlacesBusinessSearchProvider(env.GOOGLE_PLACES_API_KEY)
-      : new OverpassBusinessSearchProvider(),
+    businessSearch:
+      env.mode === "mock"
+        ? mockProviders.businessSearch
+        : env.GOOGLE_PLACES_API_KEY
+          ? new GooglePlacesBusinessSearchProvider(env.GOOGLE_PLACES_API_KEY)
+          : new OverpassBusinessSearchProvider(),
     research: env.OPENAI_API_KEY
       ? new OpenAIBusinessResearchProvider()
       : mockProviders.research,

@@ -21,6 +21,8 @@ export interface BusinessSearchInput {
   maxProspects: number;
   minimumRating: number;
   websiteStatus: "no_website" | "weak_website" | "either";
+  query?: string;
+  replace?: boolean;
 }
 
 export interface BusinessSearchProvider {

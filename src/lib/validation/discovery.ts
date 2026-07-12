@@ -6,6 +6,8 @@ export const discoveryRequestSchema = z.object({
   maxProspects: z.number().int().min(1).max(20).default(5),
   minimumRating: z.number().min(0).max(5).default(4.2),
   websiteStatus: z.enum(["no_website", "weak_website", "either"]).default("either"),
+  query: z.string().trim().max(120).optional(),
+  replace: z.boolean().optional(),
 });
 
 export type DiscoveryRequest = z.infer<typeof discoveryRequestSchema>;

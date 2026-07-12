@@ -26,10 +26,14 @@ export async function POST(request: NextRequest) {
 
   const env = getEnv();
   const providers = createProviders();
-  const providerMode = env.GOOGLE_PLACES_API_KEY ? "live" : "free";
-  const providerName = env.GOOGLE_PLACES_API_KEY
-    ? "Google Places"
-    : "OpenStreetMap Overpass";
+  const providerMode =
+    env.mode === "mock" ? "mock" : env.GOOGLE_PLACES_API_KEY ? "live" : "free";
+  const providerName =
+    env.mode === "mock"
+      ? "Mock catalog"
+      : env.GOOGLE_PLACES_API_KEY
+        ? "Google Places"
+        : "OpenStreetMap Overpass";
 
   try {
     const result = await providers.businessSearch.search(parsed.data);

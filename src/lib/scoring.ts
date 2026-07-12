@@ -24,7 +24,7 @@ export function calculateOpportunityScore(input: ScoreInput) {
   const infoScore = (input.hasPhone ? 6 : 0) + (input.hasAddress ? 6 : 0);
   const bookingScore = input.onlineBookingValuable ? 14 : 5;
   const socialGapScore = input.socialPresenceCount <= 1 ? 10 : 4;
-  const categoryFit = /(salon|tuition|repair|wellness|cafe|clinic|studio)/i.test(
+  const categoryFit = /(salon|tuition|repair|wellness|spa|massage|cafe|clinic|studio)/i.test(
     input.category,
   )
     ? 6

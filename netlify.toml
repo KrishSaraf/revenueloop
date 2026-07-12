@@ -1,0 +1,8 @@
+[build]
+  command = "npm run build"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Add GEMINI_API_KEY in Netlify dashboard:
+# Site settings → Environment variables → GEMINI_API_KEY
