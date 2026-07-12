@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LiveShowcasePreview } from "@/components/sites/live-showcase-preview";
 import { demoSites, liveSite, type ShowcaseSite } from "@/lib/showcase-sites";
 import { cn } from "@/lib/utils";
 
@@ -235,21 +236,7 @@ function FeaturedLiveSite() {
             </Link>
           </div>
         </div>
-        <a
-          href={site.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="group block transition-transform duration-300 hover:scale-[1.01]"
-        >
-          <BrowserChrome url="new-nature-spa.netlify.app">
-            <PreviewMock site={site} large />
-            <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
-              <span className="rounded-full bg-white/90 px-4 py-2 text-xs font-medium text-stone-900 shadow-lg">
-                Open in new tab
-              </span>
-            </div>
-          </BrowserChrome>
-        </a>
+        <LiveShowcasePreview site={site} showActions={false} />
       </div>
     </motion.article>
   );
@@ -295,7 +282,7 @@ function DemoCard({ site, index }: { site: ShowcaseSite; index: number }) {
               <p className="text-[11px] text-zinc-500">{site.buildLabel}</p>
             </div>
           </div>
-          <Badge tone="purple">Demo</Badge>
+          <Badge tone="purple">Interactive</Badge>
         </div>
 
         <p className="text-xs leading-relaxed text-zinc-400">{site.tagline}</p>
@@ -320,7 +307,7 @@ function DemoCard({ site, index }: { site: ShowcaseSite; index: number }) {
               icon={<ArrowUpRight size={13} />}
               className="group-hover:border-emerald-400/30 group-hover:text-emerald-300"
             >
-              Try demo
+              Open site
             </Button>
           </Link>
         </div>
@@ -353,13 +340,13 @@ export function SitesView() {
             Generated sites
           </h1>
           <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-500">
-            One live client build plus three interactive product demos. Open any demo
+            One live client build plus three interactive showcases. Open any site
             and chat — AI replies in real time.
           </p>
         </div>
         {aiLive !== null ? (
           <Badge tone={aiLive ? "green" : "amber"}>
-            {aiLive ? "AI demos live" : "AI key not set"}
+            {aiLive ? "AI online" : "AI key not set"}
           </Badge>
         ) : null}
       </motion.div>
@@ -367,7 +354,7 @@ export function SitesView() {
       <div className="grid grid-cols-3 gap-3 sm:max-w-lg">
         {[
           { label: "Live sites", value: "1" },
-          { label: "Interactive demos", value: "3" },
+          { label: "Interactive sites", value: "3" },
           { label: "Verified", value: "4" },
         ].map((stat) => (
           <motion.div
@@ -388,7 +375,7 @@ export function SitesView() {
       <motion.div variants={fade}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-100">Interactive demos</h2>
+            <h2 className="text-sm font-semibold text-zinc-100">Interactive showcases</h2>
             <p className="mt-0.5 text-xs text-zinc-500">
               Telebot, sales agent, and concierge — type and get real AI replies
             </p>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Check, Loader2, Phone, Play, Sparkles, Square, X } from "lucide-react";
+import { ArrowRight, Check, ExternalLink, Loader2, MapPin, Phone, Play, Sparkles, Square, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CountUp } from "@/components/ui/count-up";
@@ -15,8 +15,20 @@ import {
   getDashboardPipeline,
   type DashboardPipelineItem,
 } from "@/lib/seed";
+import {
+  discoveredProspects,
+  discoveryStats,
+  runProspect,
+  runProspectOffer,
+  type DiscoveredProspect,
+} from "@/lib/pipeline-demo";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
 import type { AgentName, Prospect } from "@/lib/types";
+import {
+  LiveOutboundCall,
+  VENTUREMINT_OUTBOUND_LINE,
+  type LiveCallStatus,
+} from "@/components/shared/live-outbound-call";
 import { cn, currency } from "@/lib/utils";
 
 type RunPhase = "idle" | "queued" | "running" | "awaiting" | "done";
@@ -46,48 +58,6 @@ interface AgentDefinition {
   };
 }
 
-const findingsSummary = {
-  prospect: "New Nature Spa",
-  location: "Pandan Gardens",
-  score: 79,
-  gap: "No website — phone-only enquiries",
-  queued: 6,
-};
-
-const callTranscript: { speaker: "system" | "ai" | "owner"; text: string; delayMs: number }[] = [
-  { speaker: "system", text: "Simulation. No real outbound call was placed.", delayMs: 600 },
-  {
-    speaker: "ai",
-    text: "Hi, this is VentureMint's AI assistant. I prepared a private website preview for New Nature Spa. Do you have 30 seconds?",
-    delayMs: 1200,
-  },
-  {
-    speaker: "owner",
-    text: "A website preview? We do not have a proper site right now. What did you make?",
-    delayMs: 1400,
-  },
-  {
-    speaker: "ai",
-    text: "A mobile page with your services, location, review signals and a WhatsApp enquiry button. It only uses public details you can approve.",
-    delayMs: 1500,
-  },
-  {
-    speaker: "owner",
-    text: "Sounds useful. How much would it cost to activate?",
-    delayMs: 1300,
-  },
-  {
-    speaker: "ai",
-    text: "Setup is S$399, then S$49 per month for hosting and light edits. I can send the preview and checkout link.",
-    delayMs: 1400,
-  },
-  {
-    speaker: "owner",
-    text: "Send it over. If the page looks right, we can try it this week.",
-    delayMs: 1100,
-  },
-];
-
 const pipelineStages = [
   { id: "discover", label: "Discover & evaluate", agents: [1, 2, 3] },
   { id: "findings", label: "Findings review", agents: [] as number[] },
@@ -108,17 +78,16 @@ const agentDefinitions: AgentDefinition[] = [
     writes: ["Prospect queue", "Gap signals"],
     settleMs: 700,
     logs: [
-      { text: "→ open discovery job · region=SG · radius=2.4km", delayMs: 900 },
-      { text: "→ READ overpass tiles · Pandan Gardens / Jurong East", delayMs: 1400 },
-      { text: "… waiting on maps tile 3/8 · 412ms", delayMs: 1600 },
-      { text: "→ page 1 · 48 POIs · categories: spa, cafe, clinic, tuition", delayMs: 1200 },
-      { text: "→ page 2 · 61 POIs · dedupe against known queue", delayMs: 1500 },
-      { text: "→ page 3 · 75 POIs · rate-limit backoff 800ms", delayMs: 1800 },
+      { text: "→ open discovery job · region=SG · neighbourhoods sweep", delayMs: 900 },
+      { text: "→ READ maps tiles · Toa Payoh / Bedok / Bugis", delayMs: 1400 },
+      { text: "… waiting on maps tile 4/8 · 368ms", delayMs: 1600 },
       { text: "→ filter website_status in {none, broken, placeholder}", delayMs: 1100 },
-      { text: "→ candidate New Nature Spa · Maps: no website link", delayMs: 1300 },
-      { text: "→ cross-check phone +65 6262 1006 · listing live", delayMs: 1000 },
-      { text: "→ WRITE prospect-new-nature-spa · gap_signal=no_website", delayMs: 900 },
-      { text: "✓ discovery pass · 6 leads queued · 184 scanned", delayMs: 800 },
+      { text: "→ skip closed accounts · New Nature Spa already WON", delayMs: 1000 },
+      { text: "→ candidate Petal Atelier · florist · Bugis · no website", delayMs: 1300 },
+      { text: "→ candidate Morning Bakes · bakery · Bedok · DM orders only", delayMs: 1200 },
+      { text: "→ candidate Toa Payoh Family Dental · dental · weak site", delayMs: 1400 },
+      { text: "→ WRITE 3 prospects · gap signals captured", delayMs: 900 },
+      { text: "✓ discovery pass · 3 fresh leads · 142 POIs scanned", delayMs: 800 },
     ],
     accent: {
       bar: "bg-sky-400",
@@ -136,15 +105,15 @@ const agentDefinitions: AgentDefinition[] = [
     writes: ["Research brief", "Evidence pack"],
     settleMs: 650,
     logs: [
-      { text: "→ READ prospect-new-nature-spa from queue", delayMs: 800 },
-      { text: "→ fetch Google Places details · place_id matched", delayMs: 1500 },
-      { text: "… Places API 280ms · rating 3.0 · reviews=2", delayMs: 1200 },
-      { text: "→ parse hours · open until 22:30 · phone confirmed", delayMs: 1100 },
-      { text: "→ social sweep · IG handle search · no match", delayMs: 1600 },
-      { text: "→ Facebook / TikTok scan · no owned page found", delayMs: 1400 },
-      { text: "→ evidence[1] screenshot Maps card · no website CTA", delayMs: 1000 },
-      { text: "→ evidence[2] review snippet · service unclear online", delayMs: 1100 },
-      { text: "→ gap model: no booking path · no menu · phone-only", delayMs: 900 },
+      { text: "→ READ prospect-toa-payoh-dental from queue (rank #1)", delayMs: 800 },
+      { text: "→ fetch Google Places details · Toa Payoh Family Dental", delayMs: 1500 },
+      { text: "… Places API 240ms · rating 4.9 · reviews=203", delayMs: 1200 },
+      { text: "→ parse hours · open until 18:00 · phone confirmed", delayMs: 1100 },
+      { text: "→ site audit · weak_website · no booking CTA found", delayMs: 1600 },
+      { text: "→ social sweep · no owned channels · phone-only enquiries", delayMs: 1400 },
+      { text: "→ evidence[1] screenshot site · fails mobile-friendly check", delayMs: 1000 },
+      { text: "→ evidence[2] review snippet · trust high, funnel weak", delayMs: 1100 },
+      { text: "→ gap model: no booking path · services list incomplete", delayMs: 900 },
       { text: "→ WRITE research_brief.json · evidence ×4", delayMs: 850 },
       { text: "✓ research locked · handoff to scoring", delayMs: 700 },
     ],
@@ -167,11 +136,11 @@ const agentDefinitions: AgentDefinition[] = [
       { text: "→ READ research_brief + neighbourhood demand grid", delayMs: 850 },
       { text: "→ load feature weights · website_gap 0.35 · demand 0.25", delayMs: 1000 },
       { text: "→ reachability check · phone valid · calling hours OK", delayMs: 1300 },
-      { text: "→ booking_value model · spa category uplift +12", delayMs: 1200 },
-      { text: "→ competitor density · 3 nearby spas with sites", delayMs: 1400 },
-      { text: "→ score pass 1 · 74/100 · re-weight reviews scarcity", delayMs: 1100 },
-      { text: "→ score pass 2 · 79/100 · confidence band ±4", delayMs: 1000 },
-      { text: "→ rank batch · New Nature Spa = #1 of 6", delayMs: 900 },
+      { text: "→ booking_value model · dental category uplift +14", delayMs: 1200 },
+      { text: "→ competitor density · 3 nearby clinics with online booking", delayMs: 1400 },
+      { text: "→ score pass 1 · 84/100 · booking gap weighted high", delayMs: 1100 },
+      { text: "→ score pass 2 · 88/100 · confidence band ±3", delayMs: 1000 },
+      { text: "→ rank batch · Toa Payoh Family Dental = #1 of 3", delayMs: 900 },
       { text: "→ WRITE opportunity_score · explanation for operator", delayMs: 800 },
       { text: "✓ scoring complete · findings ready to share", delayMs: 650 },
     ],
@@ -193,13 +162,13 @@ const agentDefinitions: AgentDefinition[] = [
     settleMs: 500,
     gateAfter: "pitch",
     logs: [
-      { text: "→ READ score 79 + gap list + category price band", delayMs: 900 },
-      { text: "→ price band SG spa · setup S$120–180 · pick S$140", delayMs: 1300 },
-      { text: "→ draft opening line · local + specific to Pandan Gardens", delayMs: 1400 },
-      { text: "→ value prop · owned booking page vs phone-only", delayMs: 1200 },
-      { text: "→ objection pack · “we get walk-ins” · “already on Maps”", delayMs: 1500 },
-      { text: "→ package Launch Site Sprint · monthly hosting S$49", delayMs: 1100 },
-      { text: "→ conversion prior 0.62 · similar closed spa deals", delayMs: 1000 },
+      { text: "→ READ score 88 + gap list + category price band", delayMs: 900 },
+      { text: "→ price band SG dental · setup S$120–180 · pick S$180", delayMs: 1300 },
+      { text: "→ draft opening line · local + specific to Toa Payoh", delayMs: 1400 },
+      { text: "→ value prop · appointment telebot vs phone-only scheduling", delayMs: 1200 },
+      { text: "→ objection pack · “patients prefer calling” · “we have a site”", delayMs: 1500 },
+      { text: `→ package Launch Site Sprint · S$${runProspectOffer.anchorAmount} anchor · S$${runProspectOffer.annualHosting}/year hosting`, delayMs: 1100 },
+      { text: "→ conversion prior 0.58 · similar closed clinic deals", delayMs: 1000 },
       { text: "→ WRITE sales_strategy · pitch ready for human review", delayMs: 900 },
       { text: "⏸ HOLD · awaiting operator approval before build", delayMs: 700 },
     ],
@@ -221,16 +190,16 @@ const agentDefinitions: AgentDefinition[] = [
     logs: [
       { text: "→ READ approved strategy + research_brief", delayMs: 900 },
       { text: "→ spin site compiler · mobile-first scaffold", delayMs: 1400 },
-      { text: "→ generate hero · New Nature Spa · Pandan Gardens", delayMs: 1600 },
+      { text: "→ generate hero · Toa Payoh Family Dental · Toa Payoh", delayMs: 1600 },
       { text: "… LLM section draft hero · 2.1s", delayMs: 2100 },
-      { text: "→ service catalogue · Swedish · deep tissue · aroma", delayMs: 1500 },
-      { text: "… drafting treatment cards · 1.8s", delayMs: 1800 },
+      { text: "→ services strip · check-up · scaling · emergency slots", delayMs: 1500 },
+      { text: "… drafting telebot booking flow · 1.8s", delayMs: 1800 },
       { text: "→ hours strip + call CTA + WhatsApp fallback", delayMs: 1300 },
-      { text: "→ theme tokens · warm stone · soft mint accents", delayMs: 1400 },
-      { text: "→ booking enquiry panel · form validation rules", delayMs: 1500 },
+      { text: "→ theme tokens · clinical calm · soft sky accents", delayMs: 1400 },
+      { text: "→ appointment request panel · form validation rules", delayMs: 1500 },
       { text: "→ trust strip from public reviews only", delayMs: 1200 },
       { text: "→ optimize LCP · critical CSS · lazy below-fold", delayMs: 1600 },
-      { text: "→ WRITE /sites/new-nature-spa · 6 sections committed", delayMs: 1100 },
+      { text: `→ WRITE /sites/${runProspect.siteSlug} · telebot + site live`, delayMs: 1100 },
       { text: "✓ build complete · handoff to verification", delayMs: 800 },
     ],
     accent: {
@@ -275,10 +244,10 @@ const agentDefinitions: AgentDefinition[] = [
     logs: [
       { text: "→ READ approved pitch + verified preview URL", delayMs: 900 },
       { text: "→ schedule outbound · calling hours Asia/Singapore", delayMs: 1200 },
-      { text: "→ dial +65 6262 1006 · ringing…", delayMs: 1800 },
+      { text: `→ outbound ${VENTUREMINT_OUTBOUND_LINE} · ringing ${runProspect.phone}…`, delayMs: 1800 },
       { text: "→ connected · owner on line · 00:12", delayMs: 1400 },
-      { text: "→ share preview · walk booking gap · offer S$140", delayMs: 1600 },
-      { text: "→ objection: “we get walk-ins” · handled from pack", delayMs: 1500 },
+      { text: `→ share preview · walk booking gap · offer S$${runProspectOffer.setupAmount}`, delayMs: 1600 },
+      { text: "→ objection: “patients just call us” · handled from pack", delayMs: 1500 },
       { text: "→ owner wants checkout link · interest confirmed", delayMs: 1200 },
       { text: "→ WRITE call_outcome=interested · follow-up notes", delayMs: 900 },
       { text: "✓ sales step done · finance takes over", delayMs: 700 },
@@ -300,12 +269,12 @@ const agentDefinitions: AgentDefinition[] = [
     settleMs: 600,
     logs: [
       { text: "→ READ accepted Launch Site Sprint offer", delayMs: 900 },
-      { text: "→ create Stripe Checkout session · amount S$140", delayMs: 1400 },
-      { text: "… awaiting mock webhook payment.succeeded", delayMs: 1600 },
+      { text: `→ create Stripe Checkout session · amount S$${runProspectOffer.setupAmount}`, delayMs: 1400 },
+      { text: "… awaiting Stripe webhook payment.succeeded", delayMs: 1600 },
       { text: "→ webhook received · payment Paid", delayMs: 1100 },
-      { text: "→ WRITE revenue S$140 · delivery cost S$31.80", delayMs: 1000 },
+      { text: `→ WRITE revenue S$${runProspectOffer.setupAmount} · delivery cost S$${runProspectOffer.deliveryCost.toFixed(2)}`, delayMs: 1000 },
       { text: "→ net profit booked · deal status WON", delayMs: 900 },
-      { text: "✓ New Nature Spa closed", delayMs: 700 },
+      { text: "✓ Toa Payoh Family Dental closed", delayMs: 700 },
     ],
     accent: {
       bar: "bg-teal-400",
@@ -329,13 +298,13 @@ function statusTone(
   return { label: "Ready", tone: "muted" };
 }
 
-function speakerLabel(speaker: "system" | "ai" | "owner") {
-  if (speaker === "ai") return "VentureMint";
-  if (speaker === "owner") return "Owner";
-  return "System";
-}
-
-function ClosedDeal({ item }: { item: DashboardPipelineItem }) {
+function ClosedDeal({
+  item,
+  animate = true,
+}: {
+  item: DashboardPipelineItem;
+  animate?: boolean;
+}) {
   return (
     <Link
       href={`/prospects/${item.id}`}
@@ -356,7 +325,11 @@ function ClosedDeal({ item }: { item: DashboardPipelineItem }) {
             Collected
           </p>
           <p className="mt-1 font-mono text-2xl font-semibold tabular-nums text-emerald-300 sm:text-3xl">
-            <CountUp value={item.estimatedDealValue} format={currency} />
+            <CountUp
+              value={item.estimatedDealValue}
+              format={currency}
+              durationMs={animate ? 600 : 0}
+            />
           </p>
           <p className="mt-2 inline-flex items-center gap-1 text-xs text-zinc-500 transition-colors group-hover:text-emerald-300">
             Open workspace
@@ -373,11 +346,13 @@ function MoneyStrip({
   profit,
   pipelineValue,
   activeCount,
+  animate = true,
 }: {
   revenue: number;
   profit: number;
   pipelineValue: number;
   activeCount: number;
+  animate?: boolean;
 }) {
   const cells = [
     { label: "Revenue", value: revenue, tone: "text-emerald-300" },
@@ -413,7 +388,11 @@ function MoneyStrip({
               cell.tone,
             )}
           >
-            <CountUp value={cell.value} format={currency} />
+            <CountUp
+              value={cell.value}
+              format={currency}
+              durationMs={animate ? 600 : 0}
+            />
           </p>
           {"hint" in cell && cell.hint ? (
             <p className="mt-1 text-xs text-zinc-500">{cell.hint}</p>
@@ -478,17 +457,261 @@ function NewLeadRow({ prospect, index }: { prospect: Prospect; index: number }) 
   );
 }
 
+function ProspectScoreBar({ score, highlight }: { score: number; highlight?: boolean }) {
+  return (
+    <div className="mt-3">
+      <div className="flex items-center justify-between text-[10px]">
+        <span className="text-zinc-500">Opportunity score</span>
+        <span
+          className={cn(
+            "font-mono font-semibold tabular-nums",
+            highlight ? "text-emerald-300" : "text-zinc-400",
+          )}
+        >
+          {score}/100
+        </span>
+      </div>
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all duration-700",
+            highlight ? "bg-emerald-400" : "bg-zinc-600",
+          )}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function FindingsProspectCard({
+  prospect,
+  awaiting,
+  compact,
+  showSiteLink,
+  selectable,
+  selected,
+  onSelect,
+}: {
+  prospect: DiscoveredProspect;
+  awaiting?: boolean;
+  compact?: boolean;
+  showSiteLink?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: (id: string) => void;
+}) {
+  const isHighlighted = selectable ? Boolean(selected) : prospect.rank === 1;
+
+  return (
+    <article
+      role={selectable ? "button" : undefined}
+      tabIndex={selectable ? 0 : undefined}
+      onClick={selectable ? () => onSelect?.(prospect.id) : undefined}
+      onKeyDown={
+        selectable
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect?.(prospect.id);
+              }
+            }
+          : undefined
+      }
+      aria-pressed={selectable ? isHighlighted : undefined}
+      className={cn(
+        "relative overflow-hidden rounded-xl border p-4 text-left transition-all duration-300",
+        isHighlighted
+          ? "border-emerald-400/30 bg-gradient-to-br from-emerald-400/[0.08] via-[#111114] to-[#0d0d10]"
+          : "border-white/[0.08] bg-[#111114]",
+        awaiting && isHighlighted && "ring-1 ring-amber-400/40",
+        selectable && !isHighlighted && "cursor-pointer hover:border-emerald-400/20 hover:bg-white/[0.02]",
+        selectable && isHighlighted && "cursor-pointer ring-1 ring-emerald-400/35",
+        compact && "p-3",
+      )}
+    >
+      {isHighlighted ? (
+        <span className="absolute inset-x-0 top-0 h-0.5 bg-emerald-400" aria-hidden />
+      ) : null}
+
+      <div className="flex items-start justify-between gap-2">
+        <span
+          className={cn(
+            "grid h-7 w-7 place-items-center rounded-md font-mono text-[11px] font-semibold",
+            isHighlighted ? "bg-emerald-400/15 text-emerald-300" : "bg-white/[0.06] text-zinc-500",
+          )}
+        >
+          #{prospect.rank}
+        </span>
+        {isHighlighted ? <Badge tone="green">Top pick</Badge> : null}
+      </div>
+
+      <h3
+        className={cn(
+          "mt-3 font-semibold tracking-tight text-zinc-100",
+          compact ? "text-sm" : "text-base",
+        )}
+      >
+        {prospect.name}
+      </h3>
+      <p className="mt-1 text-xs text-zinc-500">
+        {prospect.category}
+      </p>
+
+      <div className="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-zinc-500">
+        <span className="inline-flex items-center gap-1">
+          <MapPin size={11} aria-hidden />
+          {prospect.location}
+        </span>
+      </div>
+
+      <p className="mt-2.5 text-[11px] leading-relaxed text-zinc-400">{prospect.gap}</p>
+
+      <ProspectScoreBar score={prospect.score} highlight={isHighlighted} />
+
+      {isHighlighted && showSiteLink && prospect.siteSlug ? (
+        <Link
+          href={`/sites/${prospect.siteSlug}`}
+          target="_blank"
+          onClick={(event) => event.stopPropagation()}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1.5 text-[11px] font-medium text-emerald-300 transition-colors hover:bg-emerald-400/15"
+        >
+          <ExternalLink size={12} aria-hidden />
+          {prospect.siteLabel}
+        </Link>
+      ) : null}
+    </article>
+  );
+}
+
+function FindingsPanel({
+  awaiting,
+  variant = "inline",
+  showSiteLink = false,
+  selectable,
+  selectedId,
+  onSelect,
+  activeProspect,
+}: {
+  awaiting?: boolean;
+  variant?: "inline" | "dialog";
+  showSiteLink?: boolean;
+  selectable?: boolean;
+  selectedId?: string;
+  onSelect?: (id: string) => void;
+  activeProspect?: DiscoveredProspect;
+}) {
+  const pursueName = activeProspect?.name ?? runProspect.name;
+
+  if (variant === "dialog") {
+    return (
+      <div className="grid gap-3">
+        {discoveredProspects.map((prospect) => (
+          <FindingsProspectCard
+            key={prospect.id}
+            prospect={prospect}
+            awaiting={awaiting}
+            compact
+            showSiteLink={showSiteLink}
+            selectable={selectable}
+            selected={prospect.id === selectedId}
+            onSelect={onSelect}
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl border",
+        variant === "inline"
+          ? "border-violet-400/20 bg-gradient-to-br from-violet-400/[0.05] via-[#111114] to-[#0d0d10]"
+          : "border-white/[0.08] bg-[#111114]",
+      )}
+    >
+      <div
+        className={cn(
+          "flex flex-wrap items-start justify-between gap-3 border-b px-4 py-4 sm:px-5",
+          variant === "inline" ? "border-violet-400/15" : "border-white/[0.08]",
+        )}
+      >
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-violet-300">
+            Discovery findings
+          </p>
+          <h2 className="mt-1.5 text-lg font-semibold tracking-tight text-zinc-100">
+            3 businesses found · 1 recommended
+          </h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            {discoveryStats.scanned} scanned across {discoveryStats.region}. Agents 1–3
+            ranked <span className="text-zinc-300">{pursueName}</span> to pursue.
+          </p>
+        </div>
+        {awaiting ? (
+          <Badge tone="amber">Awaiting your review</Badge>
+        ) : (
+          <Badge tone="green">Approved</Badge>
+        )}
+      </div>
+
+      <div className="grid gap-3 p-4 sm:grid-cols-3 sm:p-5">
+        {discoveredProspects.map((prospect) => (
+          <FindingsProspectCard
+            key={prospect.id}
+            prospect={prospect}
+            awaiting={awaiting}
+            compact={false}
+            showSiteLink={showSiteLink}
+            selected={prospect.id === (selectedId ?? activeProspect?.id ?? runProspect.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SitePreviewBanner({ prospect }: { prospect: DiscoveredProspect }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-400/25 bg-gradient-to-r from-emerald-400/[0.08] to-sky-400/[0.06] px-4 py-3.5 sm:px-5">
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-300">
+          Build complete
+        </p>
+        <p className="mt-1 text-sm text-zinc-200">
+          <span className="font-medium">{prospect.name}</span>
+          {prospect.siteLabel ? ` — ${prospect.siteLabel}` : ""}
+        </p>
+      </div>
+      {prospect.siteSlug ? (
+        <Link href={`/sites/${prospect.siteSlug}`} target="_blank">
+          <Button size="sm" variant="primary" icon={<ExternalLink size={13} />}>
+            Open live preview
+          </Button>
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
 function AgentCard({
   agent,
   phase,
   logs,
-  transcript,
+  liveCall,
   safetyLock,
 }: {
   agent: AgentDefinition;
   phase: RunPhase;
   logs: string[];
-  transcript?: { speaker: "system" | "ai" | "owner"; text: string }[];
+  liveCall?: {
+    status: LiveCallStatus;
+    seconds: number;
+    calleeName: string;
+    calleePhone: string;
+    outcome?: string;
+  };
   safetyLock: boolean;
 }) {
   const status = statusTone(phase, safetyLock);
@@ -583,7 +806,7 @@ function AgentCard({
         )}
         aria-live={isRunning ? "polite" : "off"}
       >
-        {logs.length === 0 && !transcript?.length ? (
+        {logs.length === 0 && (!liveCall || liveCall.status === "idle") ? (
           <p className="text-zinc-600">
             {phase === "queued"
               ? "waiting for previous agent…"
@@ -597,13 +820,17 @@ function AgentCard({
               <li
                 key={`${agent.name}-log-${index}-${line.slice(0, 16)}`}
                 className={cn(
-                  index === logs.length - 1 && (isRunning || isAwaiting) && !transcript?.length
+                  index === logs.length - 1 &&
+                  (isRunning || isAwaiting) &&
+                  (!liveCall || liveCall.status === "idle")
                     ? agent.accent.log
                     : "text-zinc-500",
                 )}
               >
                 {line}
-                {index === logs.length - 1 && isRunning && !transcript?.length ? (
+                {index === logs.length - 1 &&
+                isRunning &&
+                (!liveCall || liveCall.status === "idle") ? (
                   <span className="ml-0.5 inline-block h-3 w-1.5 animate-pulse bg-current align-middle" />
                 ) : null}
               </li>
@@ -612,21 +839,16 @@ function AgentCard({
         )}
       </div>
 
-      {transcript && transcript.length > 0 ? (
-        <div className="mt-2 max-h-36 overflow-y-auto rounded-lg border border-orange-400/20 bg-orange-400/[0.04] px-2.5 py-2">
-          <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wide text-orange-300/80">
-            Call transcript
-          </p>
-          <ul className="space-y-1.5">
-            {transcript.map((line, index) => (
-              <li key={`${agent.name}-tx-${index}`} className="text-[10px] leading-relaxed">
-                <span className="font-mono text-orange-300/70">
-                  {speakerLabel(line.speaker)}:
-                </span>{" "}
-                <span className="text-zinc-300">{line.text}</span>
-              </li>
-            ))}
-          </ul>
+      {liveCall && liveCall.status !== "idle" ? (
+        <div className="mt-2">
+          <LiveOutboundCall
+            compact
+            status={liveCall.status}
+            seconds={liveCall.seconds}
+            calleeName={liveCall.calleeName}
+            calleePhone={liveCall.calleePhone}
+            outcome={liveCall.outcome}
+          />
         </div>
       ) : null}
     </article>
@@ -666,14 +888,26 @@ export function CommandCentreView() {
   const [logsByAgent, setLogsByAgent] = useState<Record<string, string[]>>(() =>
     Object.fromEntries(agentDefinitions.map((a) => [a.name, [] as string[]])),
   );
-  const [transcriptLines, setTranscriptLines] = useState<
-    { speaker: "system" | "ai" | "owner"; text: string }[]
-  >([]);
+  const [liveCall, setLiveCall] = useState<{
+    status: LiveCallStatus;
+    seconds: number;
+    calleeName: string;
+    calleePhone: string;
+    outcome?: string;
+  }>({
+    status: "idle",
+    seconds: 0,
+    calleeName: runProspect.name,
+    calleePhone: runProspect.phone,
+  });
+  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [pipelineRunning, setPipelineRunning] = useState(false);
   const [awaitingFindings, setAwaitingFindings] = useState(false);
   const [awaitingPitch, setAwaitingPitch] = useState(false);
   const [findingsShared, setFindingsShared] = useState(false);
   const [awaitingCall, setAwaitingCall] = useState(false);
+  const [selectedFindingId, setSelectedFindingId] = useState(runProspect.id);
+  const [pipelineProspect, setPipelineProspect] = useState<DiscoveredProspect>(runProspect);
   const [activeStage, setActiveStage] = useState<PipelineStageId>("discover");
   const [activeStep, setActiveStep] = useState(0);
   const cancelRef = useRef(false);
@@ -681,36 +915,32 @@ export function CommandCentreView() {
   const pitchResolver = useRef<((approved: boolean) => void) | null>(null);
   const autoRunStarted = useRef(false);
   const runPipelineRef = useRef<(() => Promise<void>) | null>(null);
+  const frozenMetricsRef = useRef(metrics);
 
-  const activeName = useMemo(() => {
-    if (awaitingFindings) return "Scoring Agent";
-    if (awaitingPitch) return "Strategy Agent";
-    if (awaitingCall) return "Sales Agent";
-    if (!pipelineRunning || activeStep < 1) return null;
-    return agentDefinitions[activeStep - 1]?.name ?? null;
-  }, [pipelineRunning, activeStep, awaitingFindings, awaitingPitch, awaitingCall]);
+  const pipelineBusy =
+    pipelineRunning || awaitingFindings || awaitingPitch || awaitingCall;
 
-  const statusLine = useMemo(() => {
-    if (awaitingFindings) {
-      return "Paused · review findings before the pitch is drafted";
-    }
-    if (awaitingPitch) {
-      return "Paused · approve the pitch before Build starts";
-    }
-    if (awaitingCall) {
-      return "Site verified · waiting before outbound call to New Nature Spa";
-    }
-    if (pipelineRunning && activeName) {
-      return `Live · ${activeName} · step ${activeStep}/${agentDefinitions.length}`;
-    }
-    return "Phase 1: Discover & evaluate (agents 1–3) → findings shared → you approve → pitch → build → call";
-  }, [awaitingFindings, awaitingPitch, awaitingCall, pipelineRunning, activeName, activeStep]);
+  if (!pipelineBusy) {
+    frozenMetricsRef.current = metrics;
+  }
+
+  const displayMetrics = pipelineBusy ? frozenMetricsRef.current : metrics;
+
+  const selectedFinding = useMemo(
+    () =>
+      discoveredProspects.find((prospect) => prospect.id === selectedFindingId) ??
+      discoveredProspects[0],
+    [selectedFindingId],
+  );
 
   useEffect(() => {
     return () => {
       cancelRef.current = true;
       findingsResolver.current?.(false);
       pitchResolver.current?.(false);
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+      }
     };
   }, []);
 
@@ -721,7 +951,18 @@ export function CommandCentreView() {
     setLogsByAgent(
       Object.fromEntries(agentDefinitions.map((a) => [a.name, [] as string[]])),
     );
-    setTranscriptLines([]);
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+    setLiveCall({
+      status: "idle",
+      seconds: 0,
+      calleeName: runProspect.name,
+      calleePhone: runProspect.phone,
+    });
+    setSelectedFindingId(runProspect.id);
+    setPipelineProspect(runProspect);
     setActiveStep(0);
     setActiveStage("discover");
     setAwaitingFindings(false);
@@ -760,6 +1001,7 @@ export function CommandCentreView() {
 
   const waitForFindingsApproval = () =>
     new Promise<boolean>((resolve) => {
+      setSelectedFindingId(runProspect.id);
       findingsResolver.current = resolve;
       setAwaitingFindings(true);
       setActiveStage("findings");
@@ -782,14 +1024,21 @@ export function CommandCentreView() {
 
   const handleApproveFindings = () => {
     const resolve = findingsResolver.current;
+    const approved = selectedFinding;
     findingsResolver.current = null;
+    setPipelineProspect(approved);
     setAwaitingFindings(false);
     setActiveStage("pitch");
+    setLiveCall((prev) => ({
+      ...prev,
+      calleeName: approved.name,
+      calleePhone: approved.phone,
+    }));
     setLogsByAgent((prev) => ({
       ...prev,
       "Scoring Agent": [
         ...(prev["Scoring Agent"] ?? []),
-        "✓ operator approved findings · Strategy Agent released",
+        `✓ operator approved ${approved.name} · Strategy Agent released`,
       ],
     }));
     setPhases((prev) => ({ ...prev, "Scoring Agent": "done" }));
@@ -872,6 +1121,7 @@ export function CommandCentreView() {
 
   const runPipeline = async () => {
     if (pipelineRunning || state.safetyLock) return;
+    frozenMetricsRef.current = getDashboardMetrics(state.prospects);
     cancelRef.current = false;
     setPipelineRunning(true);
     resetPipeline();
@@ -912,19 +1162,39 @@ export function CommandCentreView() {
           [agent.name]: [...(prev[agent.name] ?? []), line.text],
         }));
 
+        if (agent.name === "Sales Agent" && line.text.includes("outbound")) {
+          setLiveCall((prev) => ({ ...prev, status: "dialling" }));
+          await new Promise((resolve) => setTimeout(resolve, 700));
+          if (cancelRef.current) break;
+          setLiveCall((prev) => ({ ...prev, status: "ringing" }));
+        }
+
         if (
           agent.name === "Sales Agent" &&
           line.text.includes("connected · owner on line")
         ) {
-          setTranscriptLines([]);
-          for (const entry of callTranscript) {
-            if (cancelRef.current) break;
-            await new Promise((resolve) => setTimeout(resolve, entry.delayMs));
-            setTranscriptLines((prev) => [
-              ...prev,
-              { speaker: entry.speaker, text: entry.text },
-            ]);
+          setLiveCall((prev) => ({ ...prev, status: "connected", seconds: 12 }));
+          if (callTimerRef.current) clearInterval(callTimerRef.current);
+          callTimerRef.current = setInterval(() => {
+            setLiveCall((prev) =>
+              prev.status === "connected"
+                ? { ...prev, seconds: prev.seconds + 1 }
+                : prev,
+            );
+          }, 1000);
+        }
+
+        if (agent.name === "Sales Agent" && line.text.includes("✓ sales step done")) {
+          if (callTimerRef.current) {
+            clearInterval(callTimerRef.current);
+            callTimerRef.current = null;
           }
+          setLiveCall((prev) => ({
+            ...prev,
+            status: "ended",
+            outcome:
+              `Owner agreed S$${runProspectOffer.setupAmount} one-time + S$${runProspectOffer.annualHosting}/year. Checkout link sent.`,
+          }));
         }
       }
 
@@ -981,6 +1251,21 @@ export function CommandCentreView() {
     discoverNextWave();
   };
 
+  const focusDiscovery =
+    pipelineRunning && !findingsShared && activeStage === "discover";
+  const visibleAgents = focusDiscovery
+    ? agentDefinitions.filter((agent) => agent.step <= 3)
+    : agentDefinitions;
+  const showSitePreview =
+    Boolean(pipelineProspect.siteSlug) &&
+    (phases["Build Agent"] === "done" ||
+      phases["Verification Agent"] === "done" ||
+      phases["Verification Agent"] === "running" ||
+      phases["Sales Agent"] === "running" ||
+      phases["Sales Agent"] === "done" ||
+      phases["Finance Agent"] === "running" ||
+      phases["Finance Agent"] === "done");
+
   useEffect(() => {
     runPipelineRef.current = runPipeline;
   });
@@ -1011,13 +1296,6 @@ export function CommandCentreView() {
           <h1 className="font-display text-2xl font-medium tracking-tight text-zinc-50 sm:text-3xl">
             Command centre
           </h1>
-          <p className="mt-1.5 max-w-3xl text-sm text-zinc-500">
-            {statusLine}
-            <span className="text-zinc-600">
-              {" "}
-              · {metrics.closedDeals} closed · {metrics.activePipeline} in pipeline
-            </span>
-          </p>
         </div>
         <div className="flex items-center gap-2">
           {pipelineRunning || awaitingFindings || awaitingPitch || awaitingCall ? (
@@ -1042,6 +1320,16 @@ export function CommandCentreView() {
           )}
         </div>
       </div>
+
+      <MoneyStrip
+        revenue={displayMetrics.revenue}
+        profit={displayMetrics.netProfit}
+        pipelineValue={displayMetrics.pipelineValue}
+        activeCount={displayMetrics.activePipeline}
+        animate={!pipelineBusy}
+      />
+
+      {closed ? <ClosedDeal item={closed} animate={!pipelineBusy} /> : null}
 
       <div className="flex flex-wrap gap-1.5">
         {pipelineStages.map((stage) => {
@@ -1068,59 +1356,47 @@ export function CommandCentreView() {
       </div>
 
       {findingsShared ? (
-        <div className="rounded-xl border border-violet-400/25 bg-violet-400/[0.06] px-4 py-3.5 sm:px-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-violet-300">
-                Findings shared
-              </p>
-              <p className="mt-1.5 text-sm text-zinc-200">
-                <span className="font-medium">{findingsSummary.prospect}</span> ranked #1
-                · {findingsSummary.location} · score {findingsSummary.score}/100
-              </p>
-              <p className="mt-1 text-xs text-zinc-500">
-                Gap: {findingsSummary.gap}. {findingsSummary.queued} local businesses
-                queued after evaluation.
-              </p>
-            </div>
-            {awaitingFindings ? (
-              <Badge tone="amber">Awaiting your review</Badge>
-            ) : (
-              <Badge tone="green">Approved</Badge>
-            )}
-          </div>
-        </div>
+        <FindingsPanel
+          awaiting={awaitingFindings}
+          showSiteLink={showSitePreview}
+          activeProspect={pipelineProspect}
+        />
       ) : null}
+
+      {showSitePreview ? <SitePreviewBanner prospect={pipelineProspect} /> : null}
 
       {awaitingCall ? (
         <div className="rounded-xl border border-orange-400/25 bg-orange-400/[0.06] px-4 py-3 text-sm text-orange-100/90">
-          Site verified. Waiting before the Sales Agent places the outbound call…
+          Site verified. Waiting before the Sales Agent calls {pipelineProspect.name}…
         </div>
       ) : null}
 
-      <div className="grid min-h-0 auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 xl:grid-rows-2">
-        {agentDefinitions.map((agent) => (
+      {focusDiscovery ? (
+        <p className="text-xs text-zinc-500">
+          Agents 1–3 scanning Singapore neighbourhoods for businesses without adequate
+          web presence…
+        </p>
+      ) : null}
+
+      <div
+        className={cn(
+          "grid min-h-0 auto-rows-fr gap-3",
+          focusDiscovery
+            ? "grid-cols-1 sm:grid-cols-3"
+            : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 xl:grid-rows-2",
+        )}
+      >
+        {visibleAgents.map((agent) => (
           <AgentCard
             key={agent.name}
             agent={agent}
             phase={phases[agent.name] ?? "idle"}
             logs={logsByAgent[agent.name] ?? []}
-            transcript={
-              agent.name === "Sales Agent" ? transcriptLines : undefined
-            }
+            liveCall={agent.name === "Sales Agent" ? liveCall : undefined}
             safetyLock={state.safetyLock}
           />
         ))}
       </div>
-
-      <MoneyStrip
-        revenue={metrics.revenue}
-        profit={metrics.netProfit}
-        pipelineValue={metrics.pipelineValue}
-        activeCount={metrics.activePipeline}
-      />
-
-      {closed ? <ClosedDeal item={closed} /> : null}
 
       {newlyFound.length > 0 ? (
         <section className="overflow-hidden rounded-2xl border border-amber-400/20 bg-[#111114]">
@@ -1167,39 +1443,22 @@ export function CommandCentreView() {
       <Dialog
         open={awaitingFindings}
         onClose={handleRejectFindings}
-        title="Review findings before pitch"
+        title="Review discovery findings"
       >
         <div className="space-y-4">
           <p className="text-sm leading-relaxed text-zinc-400">
-            Agents 1–3 finished. Discovery, research and scoring are complete for{" "}
-            <span className="text-zinc-200">{findingsSummary.prospect}</span>. Approve
-            to let Strategy draft the pitch.
+            Agents 1–3 finished. Three businesses were found and scored. Select a
+            business to approve as the top pick and let Strategy draft the pitch.
           </p>
 
-          <dl className="grid gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] p-3 text-sm">
-            <div className="flex justify-between gap-3">
-              <dt className="text-zinc-500">Top prospect</dt>
-              <dd className="text-zinc-200">{findingsSummary.prospect}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-zinc-500">Location</dt>
-              <dd className="text-zinc-200">{findingsSummary.location}</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-zinc-500">Score</dt>
-              <dd className="font-mono text-zinc-200">{findingsSummary.score}/100</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-zinc-500">Gap</dt>
-              <dd className="max-w-[14rem] text-right text-xs text-zinc-300">
-                {findingsSummary.gap}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-zinc-500">Queue</dt>
-              <dd className="font-mono text-zinc-200">{findingsSummary.queued} businesses</dd>
-            </div>
-          </dl>
+          <FindingsPanel
+            awaiting
+            variant="dialog"
+            showSiteLink={showSitePreview}
+            selectable
+            selectedId={selectedFindingId}
+            onSelect={setSelectedFindingId}
+          />
 
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={handleRejectFindings} icon={<X size={14} />}>
@@ -1210,7 +1469,7 @@ export function CommandCentreView() {
               onClick={handleApproveFindings}
               icon={<Check size={14} />}
             >
-              Approve & draft pitch
+              Approve {selectedFinding.name}
             </Button>
           </div>
         </div>
@@ -1223,31 +1482,37 @@ export function CommandCentreView() {
       >
         <div className="space-y-4">
           <p className="text-sm leading-relaxed text-zinc-400">
-            Strategy finished for <span className="text-zinc-200">New Nature Spa</span>.
-            Confirm the package before the Build Agent spends compute on a live preview.
+            Strategy finished for{" "}
+            <span className="text-zinc-200">{pipelineProspect.name}</span>. Confirm the
+            package before the Build Agent spends compute on a live preview.
           </p>
 
           <dl className="grid gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] p-3 text-sm">
             <div className="flex justify-between gap-3">
               <dt className="text-zinc-500">Package</dt>
-              <dd className="text-zinc-200">Launch Site Sprint</dd>
+              <dd className="text-zinc-200">{runProspectOffer.packageName}</dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-zinc-500">Setup</dt>
-              <dd className="font-mono text-zinc-200">S$140</dd>
+              <dd className="font-mono text-zinc-200">
+                {currency(runProspectOffer.setupAmount)}
+              </dd>
             </div>
             <div className="flex justify-between gap-3">
-              <dt className="text-zinc-500">Monthly</dt>
-              <dd className="font-mono text-zinc-200">S$49</dd>
+              <dt className="text-zinc-500">Annual hosting</dt>
+              <dd className="font-mono text-zinc-200">
+                {currency(runProspectOffer.annualHosting)}
+              </dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-zinc-500">Score</dt>
-              <dd className="font-mono text-zinc-200">79/100</dd>
+              <dd className="font-mono text-zinc-200">{pipelineProspect.score}/100</dd>
             </div>
             <div className="flex justify-between gap-3">
               <dt className="text-zinc-500">Opening</dt>
               <dd className="max-w-[16rem] text-right text-xs leading-relaxed text-zinc-300">
-                Local spa in Pandan Gardens with no website — booking stays phone-only.
+                {pipelineProspect.category} in {pipelineProspect.location} —{" "}
+                {pipelineProspect.gap.toLowerCase()}
               </dd>
             </div>
           </dl>

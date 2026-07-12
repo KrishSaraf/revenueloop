@@ -38,7 +38,7 @@ export function SalesAgentShowcase() {
           </div>
           <div className="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1.5">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-            <span className="font-mono text-xs text-emerald-300">LIVE DEMO</span>
+            <span className="font-mono text-xs text-emerald-300">LIVE</span>
           </div>
         </div>
 
@@ -92,7 +92,7 @@ export function SalesAgentShowcase() {
                 </li>
                 <li className="flex gap-2">
                   <CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-400" />
-                  “Too expensive” → S$140 setup vs lost enquiries framing
+                  “Too expensive” → open S$200, settle S$140 · S$20/year only
                 </li>
               </ul>
             </div>

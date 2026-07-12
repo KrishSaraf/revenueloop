@@ -1,18 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
-import { ArrowRight, RefreshCw, SearchX, Store } from "lucide-react";
-import { Badge, StatusDot } from "@/components/ui/badge";
+import { MapPin, RefreshCw, SearchX, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CardSkeleton } from "@/components/ui/skeleton";
-import { stateTone } from "@/lib/presentation";
+import { ProspectCard } from "@/components/prospects/prospect-card";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
-import { stateLabels } from "@/lib/types";
 import { currency } from "@/lib/utils";
-
-const FLAGSHIP_ID = "prospect-new-nature-spa";
 
 const discoveryInput = {
   location: "Singapore",
@@ -25,11 +21,7 @@ const discoveryInput = {
 function sortProspects<T extends { id: string; opportunityScore: number }>(
   items: T[],
 ): T[] {
-  return [...items].sort((a, b) => {
-    if (a.id === FLAGSHIP_ID) return -1;
-    if (b.id === FLAGSHIP_ID) return 1;
-    return b.opportunityScore - a.opportunityScore;
-  });
+  return [...items].sort((a, b) => b.opportunityScore - a.opportunityScore);
 }
 
 export function ProspectsView() {
@@ -41,6 +33,11 @@ export function ProspectsView() {
   const prospects = useMemo(
     () => sortProspects(state.prospects),
     [state.prospects],
+  );
+
+  const pipelineValue = useMemo(
+    () => prospects.reduce((sum, p) => sum + p.estimatedDealValue, 0),
+    [prospects],
   );
 
   const runDiscovery = useCallback(
@@ -74,14 +71,19 @@ export function ProspectsView() {
     hydrated && prospects.length === 0 && !discoveryError;
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold text-zinc-100">Prospects</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-emerald-400/80">
+            Discovery queue
+          </p>
+          <h1 className="font-display mt-2 text-2xl font-medium tracking-tight text-zinc-50 sm:text-3xl">
+            Prospects
+          </h1>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-500">
             {prospects.length > 0
-              ? `${prospects.length} local small businesses found — New Nature Spa is your top opportunity.`
-              : "Discovery agents scan neighbourhood small businesses across Singapore."}
+              ? "Each card reflects the business category — layout and palette shift per lead."
+              : "Agents scan neighbourhood small businesses across Singapore."}
           </p>
         </div>
         <Button
@@ -94,9 +96,30 @@ export function ProspectsView() {
         </Button>
       </div>
 
+      {prospects.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5">
+            <Sparkles size={12} className="text-emerald-400" aria-hidden />
+            <span className="text-xs text-zinc-400">
+              <span className="font-mono text-zinc-200">{prospects.length}</span> in pipeline
+            </span>
+          </div>
+          <div className="flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5">
+            <MapPin size={12} className="text-sky-400" aria-hidden />
+            <span className="text-xs text-zinc-400">Singapore sweep</span>
+          </div>
+          <Badge tone="muted" className="font-mono">
+            {currency(pipelineValue)} pipeline value
+          </Badge>
+        </div>
+      ) : null}
+
       {isDiscovering || waitingForFirstSweep ? (
         <div className="flex items-center gap-2 text-xs text-zinc-500">
-          <StatusDot tone="blue" pulse />
+          <span className="relative flex size-2">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-sky-400 opacity-60" />
+            <span className="relative inline-flex size-2 rounded-full bg-sky-400" />
+          </span>
           Discovery Agent is scanning local small businesses…
         </div>
       ) : null}
@@ -108,7 +131,7 @@ export function ProspectsView() {
       ) : null}
 
       {!hydrated || isDiscovering || waitingForFirstSweep ? (
-        <div className="space-y-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, index) => (
             <CardSkeleton key={index} />
           ))}
@@ -120,60 +143,15 @@ export function ProspectsView() {
           description="The discovery sweep returned no results. Hit Refresh to scan again."
         />
       ) : (
-        <div className="divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.08]">
-          {prospects.map((prospect, index) => {
-            const gap = (prospect.identifiedGaps ?? [])[0] ?? prospect.summary;
-            const isFlagship = prospect.id === FLAGSHIP_ID;
-            return (
-              <article
-                key={prospect.id}
-                className={`flex flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-5 ${
-                  isFlagship ? "bg-emerald-400/[0.06]" : "bg-[#111114]"
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-[10px] text-zinc-600">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <Link
-                      href={`/prospects/${prospect.id}`}
-                      onClick={() => selectProspect(prospect.id)}
-                      className="text-sm font-semibold text-zinc-100 underline-offset-2 hover:underline"
-                    >
-                      {prospect.name}
-                    </Link>
-                    <Badge tone="muted" className="gap-1">
-                      <Store size={10} aria-hidden />
-                      Small business
-                    </Badge>
-                    {isFlagship ? (
-                      <Badge tone="green">Top opportunity</Badge>
-                    ) : null}
-                    <Badge tone={stateTone[prospect.agentState]}>
-                      {stateLabels[prospect.agentState]}
-                    </Badge>
-                  </div>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    {prospect.category} · {prospect.location} ·{" "}
-                    {prospect.reviewCount} reviews ·{" "}
-                    {currency(prospect.estimatedDealValue)} est. deal
-                  </p>
-                  <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-400">
-                    {gap}
-                  </p>
-                </div>
-                <Link
-                  href={`/prospects/${prospect.id}`}
-                  onClick={() => selectProspect(prospect.id)}
-                >
-                  <Button size="sm" icon={<ArrowRight size={13} />}>
-                    Open
-                  </Button>
-                </Link>
-              </article>
-            );
-          })}
+        <div className="grid auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {prospects.map((prospect, index) => (
+            <ProspectCard
+              key={prospect.id}
+              prospect={prospect}
+              index={index}
+              onSelect={() => selectProspect(prospect.id)}
+            />
+          ))}
         </div>
       )}
     </div>

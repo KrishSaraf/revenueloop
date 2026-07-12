@@ -3,6 +3,7 @@ export type ShowcaseKind = "client-site" | "telebot" | "sales-agent" | "concierg
 export interface ShowcaseSite {
   id: string;
   slug: string;
+  prospectId?: string;
   name: string;
   tagline: string;
   category: string;
@@ -24,6 +25,7 @@ export const showcaseSites: ShowcaseSite[] = [
   {
     id: "showcase-new-nature-spa",
     slug: "new-nature-spa",
+    prospectId: "prospect-new-nature-spa",
     name: "New Nature Spa",
     tagline:
       "Full booking site for a Pandan Gardens massage spa — treatments, hours, and call-to-book.",
@@ -44,6 +46,7 @@ export const showcaseSites: ShowcaseSite[] = [
   {
     id: "showcase-toa-payoh-telebot",
     slug: "toa-payoh-telebot",
+    prospectId: "prospect-toa-payoh-dental",
     name: "Toa Payoh Family Dental",
     tagline:
       "Healthcare telebot that triages patients, offers slots, and hands off to clinic staff.",
@@ -79,7 +82,7 @@ export const showcaseSites: ShowcaseSite[] = [
     glow: "hover:shadow-[0_0_48px_rgba(52,211,153,0.22)]",
     previewGradient: "from-[#0f1412] via-[#111916] to-[#0a0a0c]",
     buildLabel: "Sales demo",
-    highlights: ["Live transcript", "Objection pack", "S$140 offer"],
+    highlights: ["Live transcript", "S$140 closed", "S$20/year"],
   },
   {
     id: "showcase-bugis-concierge",
@@ -108,4 +111,8 @@ export const demoSites = showcaseSites.filter((s) => !s.external);
 
 export function getShowcaseSite(slug: string) {
   return showcaseSites.find((site) => site.slug === slug);
+}
+
+export function getShowcaseSiteForProspect(prospectId: string) {
+  return showcaseSites.find((site) => site.prospectId === prospectId);
 }

@@ -13,7 +13,6 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { Badge, StatusDot } from "@/components/ui/badge";
 import { CommandPalette } from "@/components/shared/command-palette";
 import { VentureMintLogo } from "@/components/landing/venturemint-logo";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
@@ -69,47 +68,9 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function SidebarFooter() {
-  const { state } = useRevenueLoop();
   return (
-    <div className="mt-auto space-y-3 pt-6">
-      <div className="rounded-lg border border-white/[0.07] bg-white/[0.03] p-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400">Loop status</span>
-          <StatusDot
-            tone={
-              state.safetyLock
-                ? "red"
-                : state.agentStatus === "Running"
-                  ? "green"
-                  : state.agentStatus === "Awaiting Approval"
-                    ? "amber"
-                    : "muted"
-            }
-            pulse={state.agentStatus === "Running"}
-          />
-        </div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          <Badge
-            tone={
-              state.safetyLock
-                ? "red"
-                : state.agentStatus === "Running"
-                  ? "green"
-                  : state.agentStatus === "Awaiting Approval"
-                    ? "amber"
-                    : "muted"
-            }
-          >
-            {state.safetyLock ? "Emergency stop" : state.agentStatus}
-          </Badge>
-          <Badge tone={state.settings.mode === "mock" ? "purple" : "blue"}>
-            {state.settings.mode === "mock" ? "Sandbox" : "Live"}
-          </Badge>
-        </div>
-      </div>
-      <p className="px-1 font-mono text-[10px] text-zinc-600">
-        ⌘K command palette
-      </p>
+    <div className="mt-auto pt-6">
+      <p className="px-1 font-mono text-[10px] text-zinc-600">⌘K command palette</p>
     </div>
   );
 }
@@ -179,45 +140,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="flex min-w-0 flex-1 flex-col lg:pl-56">
           {/* Top bar */}
-          <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#0a0a0c]/90 backdrop-blur">
-            <div className="flex items-center justify-between gap-3 px-4 py-2.5 sm:px-6">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setMobileOpen(true)}
-                  className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100 lg:hidden"
-                  aria-label="Open navigation"
-                >
-                  <Menu size={17} />
-                </button>
-                <div className="hidden items-center gap-2 sm:flex">
-                  <StatusDot
-                    tone={
-                      state.safetyLock
-                        ? "red"
-                        : state.agentStatus === "Running"
-                          ? "green"
-                          : state.agentStatus === "Awaiting Approval"
-                            ? "amber"
-                            : "muted"
-                    }
-                    pulse={state.agentStatus === "Running"}
-                  />
-                  <span className="text-xs text-zinc-400">
-                    {state.safetyLock
-                      ? "Emergency stop engaged"
-                      : state.agentStatus === "Running"
-                        ? "Loop running"
-                        : state.agentStatus === "Awaiting Approval"
-                          ? "Awaiting your approval"
-                          : state.agentStatus === "Paused"
-                            ? "Loop paused"
-                            : "Loop idle"}
-                  </span>
-                </div>
-              </div>
-              <Badge tone={state.settings.mode === "mock" ? "purple" : "blue"}>
-                {state.settings.mode === "mock" ? "Sandbox" : "Live"}
-              </Badge>
+          <header className="sticky top-0 z-20 border-b border-white/[0.07] bg-[#0a0a0c]/90 backdrop-blur lg:hidden">
+            <div className="flex items-center px-4 py-2.5 sm:px-6">
+              <button
+                onClick={() => setMobileOpen(true)}
+                className="grid h-8 w-8 cursor-pointer place-items-center rounded-md text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-100"
+                aria-label="Open navigation"
+              >
+                <Menu size={17} />
+              </button>
             </div>
             {state.safetyLock ? (
               <div className="border-t border-rose-500/20 bg-rose-500/10 px-4 py-1.5 sm:px-6">

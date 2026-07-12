@@ -1,6 +1,8 @@
 import type {
   AgentEvent,
   BusinessResearch,
+  Call,
+  CallTranscriptEntry,
   EvidenceItem,
   GeneratedWebsite,
   OpportunityScore,
@@ -80,7 +82,7 @@ export const seededProspects: Prospect[] = [
     identifiedGaps: ["No website", "No online booking", "Missing Google website link", "No service menu online"],
     monthlyImpactLow: 800,
     monthlyImpactHigh: 1800,
-    suggestedMonthlyPrice: 49,
+    suggestedMonthlyPrice: 0,
     estimatedDeliveryCost: 31.8,
   }),
   prospect({
@@ -469,7 +471,11 @@ export const seededProspects: Prospect[] = [
     inferredInfo: [
       "Practitioner profiles would raise first-visit trust.",
     ],
-    identifiedGaps: ["No booking", "Weak mobile experience", "Unanswered reviews"],
+    identifiedGaps: [
+      "No appointment booking — site lists services only",
+      "Weak mobile experience",
+      "Unanswered reviews",
+    ],
     monthlyImpactLow: 1200,
     monthlyImpactHigh: 2500,
     suggestedMonthlyPrice: 59,
@@ -580,8 +586,56 @@ export function createWebsiteForProspect(
   prospect: Prospect,
   existingSlugs: string[] = [],
 ): GeneratedWebsite {
-  const slug = createSlug(`${prospect.name} preview`, existingSlugs);
-  const sections: WebsiteSection[] = [
+  const isFlagship = prospect.id === FLAGSHIP_PROSPECT_ID;
+  const slug = isFlagship
+    ? prospect.slug
+    : createSlug(`${prospect.name} preview`, existingSlugs);
+  const sections: WebsiteSection[] = isFlagship
+    ? [
+        {
+          id: `${prospect.id}-hero`,
+          kind: "hero",
+          title: "NEW NATURE SPA",
+          body: "Traditional bodywork, foot massage & wellness in Pandan Gardens. Treatments from S$28. Mobile-first booking site built from public listing data.",
+        },
+        {
+          id: `${prospect.id}-overview`,
+          kind: "overview",
+          title: "Book your treatment",
+          body: prospect.summary,
+        },
+        {
+          id: `${prospect.id}-services`,
+          kind: "services",
+          title: "Treatments",
+          body: "Swedish massage · Foot reflexology · Body scrub · Aromatherapy — menu confirmed with owner before publish.",
+        },
+        {
+          id: `${prospect.id}-reasons`,
+          kind: "reasons",
+          title: "Why guests choose us",
+          body: `Neighbourhood spa in Pandan Gardens. Public listing shows ${prospect.rating.toFixed(1)} rating. Hours, location and call-to-book CTA on every page.`,
+        },
+        {
+          id: `${prospect.id}-reviews`,
+          kind: "reviews",
+          title: "Review signals",
+          body: "Review quotes sourced from permitted public listings only — never fabricated.",
+        },
+        {
+          id: `${prospect.id}-location`,
+          kind: "location",
+          title: "Location & hours",
+          body: `${prospect.address}. Open until 22:30. Call ${prospect.phone} to book.`,
+        },
+        {
+          id: `${prospect.id}-cta`,
+          kind: "cta",
+          title: "Book appointment",
+          body: `Call ${prospect.phone} or tap Book appointment — the live site is hosted and ready for owner review.`,
+        },
+      ]
+    : [
     {
       id: `${prospect.id}-hero`,
       kind: "hero",
@@ -637,15 +691,17 @@ export function createWebsiteForProspect(
       style: "emerald",
     },
     sections,
-    missingInfo: [
-      "Confirmed opening hours",
-      "Final service names",
-      "Owner-approved photos",
-      "Booking link or WhatsApp preference",
-    ],
+    missingInfo: isFlagship
+      ? []
+      : [
+          "Confirmed opening hours",
+          "Final service names",
+          "Owner-approved photos",
+          "Booking link or WhatsApp preference",
+        ],
     verified: true,
     verificationChecks: defaultVerificationChecks(true),
-    published: false,
+    published: isFlagship,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -654,6 +710,8 @@ export function createWebsiteForProspect(
 export function createSalesStrategyForProspect(
   prospect: Prospect,
 ): SalesStrategy {
+  const isFlagship = prospect.id === FLAGSHIP_PROSPECT_ID;
+
   return {
     id: `strategy-${prospect.id}`,
     prospectId: prospect.id,
@@ -665,15 +723,22 @@ export function createSalesStrategyForProspect(
     valueProposition:
       "A mobile-first website with services, trust signals, location details and a WhatsApp enquiry CTA can turn existing search demand into measurable leads.",
     packageName: "Launch Site Sprint",
-    proposedPrice: prospect.estimatedDealValue,
-    monthlyPrice: prospect.suggestedMonthlyPrice || 49,
-    objectionResponses: [
-      "If budget is the concern, we can activate the page first and keep edits lightweight for the first month.",
-      "If you already use social media, the website acts as the owned destination for search and maps traffic.",
-      "If timing is tight, the preview is already drafted and only needs owner-approved details.",
-    ],
-    negotiationLimits:
-      "Do not offer below S$249 setup or S$39/month. Offer a 14-day edit window before discounting.",
+    proposedPrice: isFlagship ? 200 : prospect.estimatedDealValue,
+    monthlyPrice: isFlagship ? 0 : prospect.suggestedMonthlyPrice || 49,
+    objectionResponses: isFlagship
+      ? [
+          "If budget is the concern, we can drop from S$200 to S$140 one-time — still just S$20 per year after that.",
+          "There are no monthly fees. Hosting and light edits are S$20 billed once a year.",
+          "If timing is tight, the preview is already drafted and only needs owner-approved details.",
+        ]
+      : [
+          "If budget is the concern, we can activate the page first and keep edits lightweight for the first month.",
+          "If you already use social media, the website acts as the owned destination for search and maps traffic.",
+          "If timing is tight, the preview is already drafted and only needs owner-approved details.",
+        ],
+    negotiationLimits: isFlagship
+      ? "Open at S$200 one-time. Floor S$140 one-time. S$20/year hosting only — no monthly charges."
+      : "Do not offer below S$249 setup or S$39/month. Offer a 14-day edit window before discounting.",
     callObjective:
       "Secure permission to send the preview URL and ask whether they want to activate the site this week.",
     conversionProbability: prospect.opportunityScore >= 85 ? 0.62 : 0.44,
@@ -829,13 +894,13 @@ export function getDashboardActivity(): AgentEvent[] {
   ];
 }
 
-function createCallForProspect(prospect: Prospect) {
+function createCallForProspect(prospect: Prospect): Call {
   return {
     id: `call-${prospect.id}`,
     prospectId: prospect.id,
-    status: "Completed" as const,
+    status: "Completed",
     durationSeconds: 126,
-    sentiment: "positive" as const,
+    sentiment: "positive",
     detectedObjections: ["Wants to review pricing"],
     priceDiscussed: prospect.estimatedDealValue,
     nextAction: "Send preview link and follow up.",
@@ -844,6 +909,110 @@ function createCallForProspect(prospect: Prospect) {
     startedAt: createdAt,
     completedAt: createdAt,
   };
+}
+
+export const FLAGSHIP_PROSPECT_ID = "prospect-new-nature-spa";
+
+function createFlagshipCompletedCall(prospect: Prospect): Call {
+  return {
+    id: `call-${prospect.id}`,
+    prospectId: prospect.id,
+    status: "Completed",
+    durationSeconds: 142,
+    sentiment: "positive",
+    detectedObjections: ["Pushed back on S$200 quote", "Wanted preview link"],
+    priceDiscussed: prospect.estimatedDealValue,
+    nextAction: "Deal closed — payment received.",
+    outcome: "Owner accepted S$140 one-time plus S$20/year. No monthly fees.",
+    simulation: true,
+    startedAt: createdAt,
+    completedAt: createdAt,
+  };
+}
+
+export function createTranscriptForProspect(prospect: Prospect): CallTranscriptEntry[] {
+  const callId = `call-${prospect.id}`;
+  return [
+    {
+      id: `${callId}-system-0`,
+      callId,
+      speaker: "system",
+      text: "Connected · outbound +65 9811 7311",
+      timestamp: createdAt,
+    },
+    {
+      id: `${callId}-ai-1`,
+      callId,
+      speaker: "ai",
+      text: `Hi, this is VentureMint's AI assistant. I prepared a private website preview for ${prospect.name}. Do you have 30 seconds?`,
+      timestamp: createdAt,
+      sentiment: "neutral",
+    },
+    {
+      id: `${callId}-owner-1`,
+      callId,
+      speaker: "owner",
+      text: "A website preview? We do not have a proper site right now. What did you make?",
+      timestamp: createdAt,
+      sentiment: "positive",
+    },
+    {
+      id: `${callId}-ai-2`,
+      callId,
+      speaker: "ai",
+      text: "A mobile page with your services, location, review signals and a call-to-book button. It only uses public details you can approve.",
+      timestamp: createdAt,
+      sentiment: "positive",
+    },
+    {
+      id: `${callId}-owner-2`,
+      callId,
+      speaker: "owner",
+      text: "Sounds useful. How much would it cost to activate?",
+      timestamp: createdAt,
+      sentiment: "positive",
+    },
+    {
+      id: `${callId}-ai-3`,
+      callId,
+      speaker: "ai",
+      text: "It's a one-time setup of S$200. No monthly fees — just S$20 per year to keep the site hosted and lightly updated.",
+      timestamp: createdAt,
+      sentiment: "neutral",
+    },
+    {
+      id: `${callId}-owner-3`,
+      callId,
+      speaker: "owner",
+      text: "Two hundred? That's a bit high for us. Can you do better on the setup?",
+      timestamp: createdAt,
+      sentiment: "concerned",
+    },
+    {
+      id: `${callId}-ai-4`,
+      callId,
+      speaker: "ai",
+      text: "I can meet you at S$140 one-time, same S$20 annual. No monthly charges — ever.",
+      timestamp: createdAt,
+      sentiment: "positive",
+    },
+    {
+      id: `${callId}-owner-4`,
+      callId,
+      speaker: "owner",
+      text: "Okay, S$140 works. Send the preview and checkout link.",
+      timestamp: createdAt,
+      sentiment: "positive",
+    },
+    {
+      id: `${callId}-ai-5`,
+      callId,
+      speaker: "ai",
+      text: "Done — checkout link sent. S$140 now, then S$20 billed once a year after that.",
+      timestamp: createdAt,
+      sentiment: "positive",
+    },
+  ];
 }
 
 export const discoveryWaveIds = [
@@ -879,15 +1048,19 @@ export function buildDashboardWorkspace() {
     createSalesStrategyForProspect(item),
   );
   const evidence = prospects.flatMap((item) => createEvidenceForProspect(item));
-  const calls = prospects.map((item) => createCallForProspect(item));
+  const flagship = prospects.find((item) => item.id === FLAGSHIP_PROSPECT_ID)!;
+  const otherCalls = prospects
+    .filter((item) => item.id !== FLAGSHIP_PROSPECT_ID)
+    .map((item) => createCallForProspect(item));
+  const calls = [createFlagshipCompletedCall(flagship), ...otherCalls];
+  const transcripts = createTranscriptForProspect(flagship);
 
-  const flagship = prospects.find((item) => item.id === "prospect-new-nature-spa")!;
   const offer = {
     id: `offer-${flagship.id}`,
     prospectId: flagship.id,
     packageName: "Launch Site Sprint",
     setupAmount: flagship.estimatedDealValue,
-    monthlyAmount: flagship.suggestedMonthlyPrice ?? 49,
+    monthlyAmount: 0,
     status: "Accepted" as const,
     createdAt,
   };
@@ -912,6 +1085,7 @@ export function buildDashboardWorkspace() {
     strategies,
     evidence,
     calls,
+    transcripts,
     offers: [offer],
     payments: [payment],
     events: getDashboardActivity(),
@@ -934,7 +1108,7 @@ export function createInitialState(): RevenueLoopState {
     websites: workspace.websites,
     strategies: workspace.strategies,
     calls: workspace.calls,
-    transcripts: [],
+    transcripts: workspace.transcripts,
     offers: workspace.offers,
     payments: workspace.payments,
     runs: [],
@@ -971,4 +1145,35 @@ export function createInitialState(): RevenueLoopState {
     safetyLock: false,
     lastUpdatedAt: createdAt,
   };
+}
+
+/** Fix stale localStorage where flagship site used a generated preview slug. */
+export function patchFlagshipWebsite(state: RevenueLoopState): RevenueLoopState {
+  const flagship = state.prospects.find((item) => item.id === FLAGSHIP_PROSPECT_ID);
+  if (!flagship) return state;
+
+  const canonical = createWebsiteForProspect(flagship);
+  const index = state.websites.findIndex(
+    (item) => item.prospectId === FLAGSHIP_PROSPECT_ID,
+  );
+  if (index === -1) {
+    return { ...state, websites: [...state.websites, canonical] };
+  }
+
+  const existing = state.websites[index];
+  if (existing.slug === canonical.slug && existing.published === canonical.published) {
+    return state;
+  }
+
+  const websites = [...state.websites];
+  websites[index] = {
+    ...existing,
+    slug: canonical.slug,
+    published: canonical.published,
+    sections: canonical.sections,
+    missingInfo: canonical.missingInfo,
+    verified: true,
+    verificationChecks: canonical.verificationChecks,
+  };
+  return { ...state, websites };
 }

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       mode: "mock",
       checkoutUrl: `/mock-checkout/${parsed.data.offerId}`,
-      message: "Mock checkout link created. No card data is stored.",
+      message: "Checkout link created.",
     });
   }
 

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { GeneratedSitePreview } from "@/components/sites/generated-site-preview";
+import { LiveShowcasePreview } from "@/components/sites/live-showcase-preview";
 import { BugisBrewConciergeShowcase } from "@/components/sites/showcase/bugis-brew-concierge";
 import { SalesAgentShowcase } from "@/components/sites/showcase/sales-agent-demo";
 import { ToaPayohTelebotShowcase } from "@/components/sites/showcase/toa-payoh-telebot";
@@ -34,29 +35,22 @@ export function GeneratedSitePage({ slug }: { slug: string }) {
 
   if (showcase?.external) {
     return (
-      <main className="grid min-h-screen place-items-center bg-[#0a0a0c] p-6 text-zinc-100">
-        <EmptyState
-          icon={Globe2}
-          title={`${showcase.name} is live`}
-          description="This build is hosted outside VentureMint. Open the live Netlify site to view the full massage booking experience."
-          action={
-            <div className="flex flex-wrap justify-center gap-2">
-              <a
-                href={showcase.href}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="primary">Open live site</Button>
-              </a>
-              <Link href="/sites">
-                <Button variant="ghost" icon={<ArrowLeft size={14} />}>
-                  Back to sites
-                </Button>
-              </Link>
+      <main className="min-h-screen bg-[#0a0a0c] p-3 sm:p-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.08] bg-[#111114] px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="green">Live</Badge>
+              <Badge tone="green">Verified</Badge>
+              <Badge tone="muted">{showcase.buildLabel}</Badge>
             </div>
-          }
-          className="w-full max-w-md border-white/10"
-        />
+            <Link href="/sites">
+              <Button size="sm" variant="ghost" icon={<ArrowLeft size={14} />}>
+                Back to sites
+              </Button>
+            </Link>
+          </div>
+          <LiveShowcasePreview site={showcase} tall showActions={false} />
+        </div>
       </main>
     );
   }
@@ -102,9 +96,9 @@ export function GeneratedSitePage({ slug }: { slug: string }) {
             </Badge>
             <Badge tone="purple">Owner approval required</Badge>
           </div>
-          <Link href={`/prospects/${prospect.id}`}>
+          <Link href="/sites">
             <Button size="sm" variant="ghost" icon={<ArrowLeft size={14} />}>
-              Back to workspace
+              Back to sites
             </Button>
           </Link>
         </div>

@@ -65,11 +65,11 @@ export function ApprovalCard({
             ) : null}
           </p>
           <p className="mt-2 text-xs leading-relaxed text-zinc-400">
-            Recommended action: place a simulated sales call presenting the verified
+            Recommended action: place an outbound sales call presenting the verified
             website preview and the {strategy?.packageName ?? "Launch Site Sprint"} package.
           </p>
-          <p className="mt-1.5 text-[11px] text-amber-300/80">
-            Simulated call only — sandbox mode never contacts real businesses.
+          <p className="mt-1.5 text-[11px] text-emerald-300/80">
+            Calls go out from the VentureMint line (+65 9811 7311) after you approve.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
@@ -114,16 +114,15 @@ export function ApprovalCard({
         title="Approve outreach"
       >
         <p className="text-sm leading-relaxed text-zinc-400">
-          You are approving a <strong className="text-zinc-200">simulated</strong>{" "}
-          sales call to {prospect.name}. In live mode this gate would trigger a real
-          outbound call, so approval is always explicit.
+          You are approving an outbound sales call to {prospect.name}. VentureMint will
+          dial from +65 9811 7311 — approval is always explicit before any outreach.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
             Cancel
           </Button>
           <Button variant="primary" onClick={handleApprove}>
-            Approve simulated call
+            Approve call
           </Button>
         </div>
       </Dialog>

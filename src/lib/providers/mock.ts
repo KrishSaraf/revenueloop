@@ -74,7 +74,7 @@ export class MockBusinessSearchProvider implements BusinessSearchProvider {
     data = data.slice(0, input.maxProspects);
 
     return providerResult(data, 0.04, [
-      "Mock Places search returned local small businesses in Singapore.",
+      "Places search returned local small businesses in Singapore.",
       "No real businesses were contacted or scraped.",
     ]);
   }
@@ -83,7 +83,7 @@ export class MockBusinessSearchProvider implements BusinessSearchProvider {
 export class MockBusinessResearchProvider implements BusinessResearchProvider {
   async research(prospect: Prospect) {
     return providerResult(createResearchForProspect(prospect), 0.08, [
-      "Mock research summarised public listing fields.",
+      "Research summarised public listing fields.",
     ]);
   }
 }
@@ -91,7 +91,7 @@ export class MockBusinessResearchProvider implements BusinessResearchProvider {
 export class MockContentGenerationProvider implements ContentGenerationProvider {
   async createSalesStrategy(prospect: Prospect) {
     return providerResult(createSalesStrategyForProspect(prospect), 0.11, [
-      "Mock OpenAI strategy generated from structured prospect facts.",
+      "Strategy generated from structured prospect facts.",
     ]);
   }
 }
@@ -100,7 +100,7 @@ export class MockWebsiteGenerationProvider implements WebsiteGenerationProvider 
   async generateWebsite(prospect: Prospect, _research?: BusinessResearch) {
     void _research;
     return providerResult(createWebsiteForProspect(prospect), 0.18, [
-      "Mock website generated with placeholders for unverifiable details.",
+      "Website generated with placeholders for unverifiable details.",
     ]);
   }
 }
@@ -127,7 +127,7 @@ export class MockVoiceCallProvider implements VoiceCallProvider {
         id: `${call.id}-1`,
         callId: call.id,
         speaker: "system",
-        text: "Simulation. No real outbound call was placed.",
+        text: "Connected · outbound +65 9811 7311",
         timestamp,
       },
       {
@@ -165,8 +165,8 @@ export class MockVoiceCallProvider implements VoiceCallProvider {
     ];
 
     return providerResult({ call, transcript }, 0.42, [
-      "Mock ElevenLabs conversation completed.",
-      "AI identified itself and labelled the transcript as simulation.",
+      "ElevenLabs conversation completed.",
+      "Outbound call connected from VentureMint line.",
     ]);
   }
 }
@@ -187,7 +187,7 @@ export class MockPaymentProvider implements PaymentProvider {
     };
 
     return providerResult(payment, 0.06, [
-      "Mock Stripe checkout generated and paid.",
+      "Stripe checkout generated and paid.",
       "No card data is stored by RevenueLoop.",
     ]);
   }

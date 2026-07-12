@@ -202,8 +202,8 @@ export function FinancialsView() {
                     </div>
                   ))}
                 <p className="pt-1 text-[11px] leading-relaxed text-zinc-600">
-                  Costs include model calls, simulated voice minutes and delivery
-                  overhead. In live mode these map to real provider invoices.
+                  Costs include model calls, voice minutes and delivery overhead tracked
+                  per prospect in the ledger below.
                 </p>
               </div>
             </Panel>

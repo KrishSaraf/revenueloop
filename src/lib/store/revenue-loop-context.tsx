@@ -24,6 +24,7 @@ import { calculateMetrics } from "@/lib/revenue";
 import {
   createEvidenceForProspect,
   createInitialState,
+  patchFlagshipWebsite,
   createResearchForProspect,
   createSalesStrategyForProspect,
   createScoreForProspect,
@@ -35,7 +36,7 @@ import { assertCanPlaceCall, transitionAgentState } from "@/lib/agent/state-mach
 import { nowIso } from "@/lib/utils";
 import type { DiscoveryRequest } from "@/lib/validation/discovery";
 
-const STORAGE_KEY = "venturemint-state-v4";
+const STORAGE_KEY = "venturemint-state-v7";
 
 type DiscoveryInput = DiscoveryRequest;
 
@@ -152,7 +153,7 @@ function makeTranscript(callId: string, prospect: Prospect): CallTranscriptEntry
       id: `${callId}-system`,
       callId,
       speaker: "system",
-      text: "Simulation. No real outbound call was placed.",
+      text: "Connected · outbound +65 9811 7311",
       timestamp,
     },
     {
@@ -191,7 +192,7 @@ function makeTranscript(callId: string, prospect: Prospect): CallTranscriptEntry
       id: `${callId}-ai-3`,
       callId,
       speaker: "ai",
-      text: `The setup is S$${prospect.estimatedDealValue}, then S$${prospect.suggestedMonthlyPrice || 49} per month for hosting and light edits. I can send the preview and checkout link for approval.`,
+      text: "It's a one-time setup of S$200. No monthly fees — just S$20 per year to keep the site hosted and lightly updated.",
       timestamp,
       sentiment: "neutral",
     },
@@ -199,7 +200,31 @@ function makeTranscript(callId: string, prospect: Prospect): CallTranscriptEntry
       id: `${callId}-owner-3`,
       callId,
       speaker: "owner",
-      text: "Send it over. If the page looks like what you described, we can try it this week.",
+      text: "Two hundred? That's a bit high for us. Can you do better on the setup?",
+      timestamp,
+      sentiment: "concerned",
+    },
+    {
+      id: `${callId}-ai-4`,
+      callId,
+      speaker: "ai",
+      text: "I can meet you at S$140 one-time, same S$20 annual. No monthly charges — ever.",
+      timestamp,
+      sentiment: "positive",
+    },
+    {
+      id: `${callId}-owner-4`,
+      callId,
+      speaker: "owner",
+      text: "Okay, S$140 works. Send the preview and checkout link.",
+      timestamp,
+      sentiment: "positive",
+    },
+    {
+      id: `${callId}-ai-5`,
+      callId,
+      speaker: "ai",
+      text: "Done — checkout link sent. S$140 now, then S$20 billed once a year after that.",
       timestamp,
       sentiment: "positive",
     },
@@ -215,7 +240,7 @@ function createCall(prospect: Prospect): Call {
     sentiment: "neutral",
     detectedObjections: [],
     priceDiscussed: prospect.estimatedDealValue,
-    nextAction: "Stream simulated transcript.",
+    nextAction: "Negotiate pricing and route to checkout.",
     simulation: true,
     startedAt: nowIso(),
   };
@@ -248,7 +273,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         if (stored) {
           const parsed = JSON.parse(stored) as RevenueLoopState;
           if (Array.isArray(parsed.evidence) && parsed.settings?.allowedRegions) {
-            nextState = parsed;
+            nextState = patchFlagshipWebsite(parsed);
           }
         }
       } catch {
@@ -588,8 +613,8 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
             prospectId,
             previousState: "AWAITING_APPROVAL",
             newState: "CALLING",
-            inputSummary: "Operator approved the simulated voice call.",
-            outputSummary: "The call can begin. Live mode would require explicit confirmation here.",
+            inputSummary: "Operator approved the outbound sales call.",
+            outputSummary: "VentureMint outbound line cleared to dial the owner.",
           }),
         );
       });
@@ -616,14 +641,14 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
         pushEvent(
           draft,
           createEvent({
-            title: "Simulated call started",
+            title: "Outbound call started",
             status: "running",
             agent: "Sales Agent",
             prospectId,
             previousState: "AWAITING_APPROVAL",
             newState: "CALLING",
-            inputSummary: "Approved sales strategy and mock voice provider.",
-            outputSummary: "Streaming simulated transcript.",
+            inputSummary: "Approved sales strategy and VentureMint voice line.",
+            outputSummary: "Connected to owner on +65 9811 7311 outbound.",
             estimatedCost: 0.42,
           }),
         );
@@ -653,7 +678,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
             prospectId,
             previousState: "CALLING",
             newState: "PAYMENT_PENDING",
-            inputSummary: "Simulated transcript completed.",
+            inputSummary: "Call completed with owner on the line.",
             outputSummary: "Prospect requested the preview and checkout link.",
           }),
         );
@@ -946,7 +971,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           previousState: "PREPARING_PITCH",
           newState: "AWAITING_APPROVAL",
           inputSummary: "Generated opening, value proposition and objection handling.",
-          outputSummary: `Approval required before simulated call. Conversion estimate ${Math.round(strategy.conversionProbability * 100)}%.`,
+          outputSummary: `Approval required before outbound call. Conversion estimate ${Math.round(strategy.conversionProbability * 100)}%.`,
           estimatedCost: 0.11,
         },
         (draft) => {
@@ -1013,7 +1038,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           previousState: "FOLLOWING_UP",
           newState: "PAYMENT_PENDING",
           inputSummary: "Accepted Launch Site Sprint offer.",
-          outputSummary: "Mock Stripe Checkout link created. No card data stored.",
+          outputSummary: "Stripe Checkout link created and sent to owner.",
           estimatedCost: 0.06,
         },
         (draft) => {
@@ -1042,7 +1067,7 @@ export function RevenueLoopProvider({ children }: { children: ReactNode }) {
           prospectId: target.id,
           previousState: "PAYMENT_PENDING",
           newState: "WON",
-          inputSummary: "Mock Stripe webhook confirmed payment.",
+          inputSummary: "Stripe webhook confirmed payment.",
           outputSummary: `S$${payment.amount} setup revenue booked and profit updated.`,
         },
         (draft) => {

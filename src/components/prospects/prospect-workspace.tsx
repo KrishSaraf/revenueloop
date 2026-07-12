@@ -7,12 +7,9 @@ import {
   CheckCircle2,
   Circle,
   Copy,
-  ExternalLink,
   FileSearch,
   Monitor,
-  Smartphone,
   Sparkles,
-  Tablet,
   XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +23,9 @@ import { TabList } from "@/components/ui/tabs";
 import { ActivityFeed } from "@/components/shared/activity-feed";
 import { ApprovalCard } from "@/components/shared/approval-card";
 import { GeneratedSitePreview } from "@/components/sites/generated-site-preview";
+import { LiveShowcasePreview } from "@/components/sites/live-showcase-preview";
+import { getShowcaseSiteForProspect } from "@/lib/showcase-sites";
+import { FLAGSHIP_PROSPECT_ID } from "@/lib/seed";
 import { stateTone } from "@/lib/presentation";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
 import { stateLabels } from "@/lib/types";
@@ -40,12 +40,6 @@ type TabId =
   | "sales"
   | "activity"
   | "financials";
-
-const viewportWidths = {
-  desktop: "100%",
-  tablet: "768px",
-  mobile: "390px",
-} as const;
 
 function CopyButton({ text, label }: { text: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -86,8 +80,9 @@ export function ProspectWorkspace({ id }: { id: string }) {
     publishWebsite,
     hydrated,
   } = useRevenueLoop();
-  const [tab, setTab] = useState<TabId>("overview");
-  const [viewport, setViewport] = useState<keyof typeof viewportWidths>("desktop");
+  const [tab, setTab] = useState<TabId>(
+    id === FLAGSHIP_PROSPECT_ID ? "preview" : "overview",
+  );
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [draftBody, setDraftBody] = useState("");
 
@@ -95,6 +90,8 @@ export function ProspectWorkspace({ id }: { id: string }) {
   const research = state.research.find((item) => item.prospectId === id);
   const score = state.scores.find((item) => item.prospectId === id);
   const website = state.websites.find((item) => item.prospectId === id);
+  const showcase = getShowcaseSiteForProspect(id);
+  const previewSlug = showcase?.slug ?? website?.slug;
   const strategy = state.strategies.find((item) => item.prospectId === id);
   const call = state.calls.find((item) => item.prospectId === id);
   const transcript = state.transcripts.filter((item) => item.callId === call?.id);
@@ -206,7 +203,7 @@ export function ProspectWorkspace({ id }: { id: string }) {
         <ApprovalCard
           prospect={prospect}
           strategy={strategy}
-          previewSlug={website?.slug}
+          previewSlug={previewSlug}
         />
       ) : null}
 
@@ -581,87 +578,61 @@ export function ProspectWorkspace({ id }: { id: string }) {
 
       {/* ─── Website preview ─── */}
       {tab === "preview" ? (
-        website ? (
-          <div className="space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] p-1">
-                {(
-                  [
-                    { id: "desktop", icon: Monitor, label: "Desktop" },
-                    { id: "tablet", icon: Tablet, label: "Tablet" },
-                    { id: "mobile", icon: Smartphone, label: "Mobile" },
-                  ] as const
-                ).map((option) => {
-                  const Icon = option.icon;
-                  return (
-                    <button
-                      key={option.id}
-                      onClick={() => setViewport(option.id)}
-                      className={cn(
-                        "grid h-7 w-9 cursor-pointer place-items-center rounded-md transition-colors",
-                        viewport === option.id
-                          ? "bg-white/10 text-zinc-100"
-                          : "text-zinc-500 hover:text-zinc-300",
-                      )}
-                      aria-label={`${option.label} viewport`}
-                      aria-pressed={viewport === option.id}
-                    >
-                      <Icon size={14} />
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1" role="group" aria-label="Theme">
-                  {(["emerald", "indigo", "amber"] as const).map((style) => (
-                    <button
-                      key={style}
-                      onClick={() => updateWebsiteTheme(website.id, style)}
-                      className={cn(
-                        "h-6 w-6 cursor-pointer rounded-full border-2 transition-transform hover:scale-110",
-                        style === "emerald" && "bg-emerald-500",
-                        style === "indigo" && "bg-indigo-500",
-                        style === "amber" && "bg-amber-500",
-                        website.theme.style === style
-                          ? "border-white"
-                          : "border-transparent",
-                      )}
-                      aria-label={`${style} theme`}
-                      aria-pressed={website.theme.style === style}
-                    />
-                  ))}
-                </div>
-                <Link href={`/sites/${website.slug}`}>
-                  <Button size="sm" variant="ghost" icon={<ExternalLink size={13} />}>
-                    Open preview
-                  </Button>
-                </Link>
-                <CopyButton
-                  text={`/sites/${website.slug}`}
-                  label="preview link"
-                />
-                {!website.published ? (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={() => publishWebsite(website.id)}
-                    disabled={state.safetyLock}
-                  >
-                    Publish preview
-                  </Button>
-                ) : (
+        showcase ? (
+          <Panel>
+            <PanelHeader
+              eyebrow="Build Agent"
+              title="Generated site"
+              action={
+                website?.published ? (
                   <Badge tone="green">Published</Badge>
-                )}
+                ) : (
+                  <Badge tone="green">Live</Badge>
+                )
+              }
+            />
+            <div className="p-4 sm:p-5">
+              <LiveShowcasePreview site={showcase} tall />
+            </div>
+          </Panel>
+        ) : website ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div className="flex items-center gap-1" role="group" aria-label="Theme">
+                {(["emerald", "indigo", "amber"] as const).map((style) => (
+                  <button
+                    key={style}
+                    onClick={() => updateWebsiteTheme(website.id, style)}
+                    className={cn(
+                      "h-6 w-6 cursor-pointer rounded-full border-2 transition-transform hover:scale-110",
+                      style === "emerald" && "bg-emerald-500",
+                      style === "indigo" && "bg-indigo-500",
+                      style === "amber" && "bg-amber-500",
+                      website.theme.style === style
+                        ? "border-white"
+                        : "border-transparent",
+                    )}
+                    aria-label={`${style} theme`}
+                    aria-pressed={website.theme.style === style}
+                  />
+                ))}
               </div>
+              {!website.published ? (
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => publishWebsite(website.id)}
+                  disabled={state.safetyLock}
+                >
+                  Publish preview
+                </Button>
+              ) : (
+                <Badge tone="green">Published</Badge>
+              )}
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-white/[0.08] bg-[#0d0d10] p-4 sm:p-6">
-              <div
-                className="mx-auto transition-[max-width] duration-300"
-                style={{ maxWidth: viewportWidths[viewport] }}
-              >
-                <GeneratedSitePreview website={website} prospect={prospect} />
-              </div>
+              <GeneratedSitePreview website={website} prospect={prospect} />
             </div>
 
             <Panel>
@@ -897,7 +868,7 @@ export function ProspectWorkspace({ id }: { id: string }) {
           {transcript.length > 0 ? (
             <div className="sm:col-span-2 lg:col-span-4">
               <Panel>
-                <PanelHeader eyebrow="Call" title="Simulated call transcript" />
+                <PanelHeader eyebrow="Call" title="Call transcript" />
                 <div className="space-y-2 p-4 sm:p-5">
                   {transcript.map((entry) => (
                     <div

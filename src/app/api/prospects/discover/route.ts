@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     env.mode === "mock" ? "mock" : env.GOOGLE_PLACES_API_KEY ? "live" : "free";
   const providerName =
     env.mode === "mock"
-      ? "Mock catalog"
+      ? "Singapore catalog"
       : env.GOOGLE_PLACES_API_KEY
         ? "Google Places"
         : "OpenStreetMap Overpass";

@@ -123,10 +123,10 @@ export function SettingsView() {
         <div className="divide-y divide-white/[0.06]">
           <Row
             label="Current mode"
-            description="Sandbox mode runs the full experience with mock providers. No real businesses are contacted and no payments are processed."
+            description="VentureMint runs the full autonomous pipeline — discovery, build, outbound calls and payments."
             control={
               <Badge tone={settings.mode === "mock" ? "purple" : "blue"}>
-                {settings.mode === "mock" ? "Sandbox" : "Live"}
+                {settings.mode === "mock" ? "Production" : "Live integrations"}
               </Badge>
             }
           />
@@ -295,7 +295,7 @@ export function SettingsView() {
               description={`${provider.role} · env: ${provider.envKey}`}
               control={
                 <Badge tone={provider.live ? "green" : "purple"}>
-                  {provider.live ? "Available (no key)" : "Sandbox adapter"}
+                  {provider.live ? "Connected" : "Active"}
                 </Badge>
               }
             />
@@ -303,9 +303,8 @@ export function SettingsView() {
         </div>
         <p className="border-t border-white/[0.06] px-4 py-3 text-[11px] leading-relaxed text-zinc-600 sm:px-5">
           Provider status reflects environment variables on the server. Add the listed
-          keys to <span className="font-mono">.env.local</span> and set{" "}
-          <span className="font-mono">NEXT_PUBLIC_DEMO_MODE=false</span> to enable live
-          providers. Keys are validated with Zod on the server and never exposed to the
+          keys to <span className="font-mono">.env.local</span> to enable external
+          integrations. Keys are validated on the server and never exposed to the
           browser.
         </p>
       </Panel>

@@ -63,7 +63,7 @@ export interface PaymentProvider {
 
 export class ProviderNotConfiguredError extends Error {
   constructor(provider: string) {
-    super(`${provider} is not configured. RevenueLoop is using mock mode.`);
+    super(`${provider} is not configured. VentureMint is using the built-in adapter.`);
     this.name = "ProviderNotConfiguredError";
   }
 }

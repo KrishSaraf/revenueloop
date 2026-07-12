@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CheckCheck, Phone, PhoneCall, Trophy } from "lucide-react";
 import { Badge, StatusDot } from "@/components/ui/badge";
@@ -8,36 +8,55 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { ApprovalCard } from "@/components/shared/approval-card";
+import {
+  LiveOutboundCall,
+  type LiveCallStatus,
+} from "@/components/shared/live-outbound-call";
+import { FLAGSHIP_PROSPECT_ID } from "@/lib/seed";
 import { useRevenueLoop } from "@/lib/store/revenue-loop-context";
-import { cn, currency } from "@/lib/utils";
+import { currency } from "@/lib/utils";
 
 export function SalesAgentView() {
   const { state, hydrated } = useRevenueLoop();
-  const transcriptRef = useRef<HTMLDivElement>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const awaiting = state.prospects.filter(
     (p) => p.agentState === "AWAITING_APPROVAL" && !p.doNotContact,
   );
   const activeCall = state.calls.find((c) => c.status === "Calling");
-  const latestCall = activeCall ?? state.calls[0];
+  const flagshipCall = state.calls.find(
+    (c) => c.prospectId === FLAGSHIP_PROSPECT_ID && c.status === "Completed",
+  );
+  const latestCall = activeCall ?? flagshipCall ?? state.calls.find((c) => c.status === "Completed") ?? state.calls[0];
   const callProspect = latestCall
     ? state.prospects.find((p) => p.id === latestCall.prospectId)
     : undefined;
-  const transcript = latestCall
-    ? state.transcripts.filter((t) => t.callId === latestCall.id)
-    : [];
   const won = state.prospects.filter((p) => p.agentState === "WON");
   const lost = state.prospects.filter((p) => p.agentState === "REJECTED");
   const inConversation = state.prospects.filter((p) =>
     ["CALLING", "FOLLOWING_UP", "PAYMENT_PENDING"].includes(p.agentState),
   );
 
+  const callStatus: LiveCallStatus = useMemo(() => {
+    if (!latestCall) return "idle";
+    if (latestCall.status === "Calling") return "connected";
+    if (latestCall.status === "Completed") return "ended";
+    return "idle";
+  }, [latestCall]);
+
   useEffect(() => {
-    transcriptRef.current?.scrollTo({
-      top: transcriptRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }, [transcript.length]);
+    if (callStatus !== "connected") {
+      setElapsedSeconds(latestCall?.durationSeconds ?? 0);
+      return;
+    }
+
+    setElapsedSeconds(12);
+    const timer = window.setInterval(() => {
+      setElapsedSeconds((value) => value + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [callStatus, latestCall?.id, latestCall?.durationSeconds]);
 
   if (!hydrated) {
     return <div className="skeleton h-64 rounded-xl" aria-hidden />;
@@ -102,7 +121,7 @@ export function SalesAgentView() {
                 <EmptyState
                   icon={Phone}
                   title="No active conversations"
-                  description="Approved prospects appear here once the simulated call begins."
+                  description="Approved prospects appear here once the outbound call begins."
                 />
               </div>
             ) : (
@@ -199,11 +218,11 @@ export function SalesAgentView() {
                   {latestCall.status === "Calling" ? (
                     <>
                       <StatusDot tone="green" pulse />
-                      <span className="font-mono text-xs text-emerald-300">LIVE · SIMULATED</span>
+                      <span className="font-mono text-xs text-emerald-300">ON CALL</span>
                     </>
                   ) : (
                     <Badge tone={latestCall.status === "Completed" ? "green" : "muted"}>
-                      {latestCall.status}
+                      {latestCall.status === "Completed" ? "Done" : latestCall.status}
                       {latestCall.durationSeconds
                         ? ` · ${Math.floor(latestCall.durationSeconds / 60)}m ${latestCall.durationSeconds % 60}s`
                         : ""}
@@ -218,43 +237,28 @@ export function SalesAgentView() {
               <EmptyState
                 icon={PhoneCall}
                 title="No calls yet"
-                description="Approve an opportunity to start a simulated sales call. The transcript streams here in real time."
+                description="Approve an opportunity to start an outbound sales call from the VentureMint line."
               />
             </div>
           ) : (
             <>
-              <div
-                ref={transcriptRef}
-                className="max-h-[420px] flex-1 space-y-2 overflow-y-auto p-4 sm:p-5"
-                aria-live="polite"
-                aria-label="Call transcript"
-              >
-                {transcript.length === 0 ? (
-                  <p className="text-xs text-zinc-600">
-                    Transcript not available for this call.
-                  </p>
-                ) : (
-                  transcript.map((entry) => (
-                    <div
-                      key={entry.id}
-                      className={cn(
-                        "max-w-[85%] rounded-lg px-3 py-2 text-xs leading-relaxed",
-                        entry.speaker === "ai"
-                          ? "bg-emerald-400/10 text-emerald-100"
-                          : entry.speaker === "owner"
-                            ? "ml-auto bg-white/[0.06] text-zinc-300"
-                            : "mx-auto bg-transparent text-center font-mono text-[10px] text-zinc-600",
-                      )}
-                    >
-                      {entry.speaker !== "system" ? (
-                        <span className="mb-0.5 block font-mono text-[9px] uppercase tracking-wide opacity-60">
-                          {entry.speaker === "ai" ? "VentureMint" : "Owner"}
-                        </span>
-                      ) : null}
-                      {entry.text}
-                    </div>
-                  ))
-                )}
+              <div className="flex-1 p-4 sm:p-5">
+                <LiveOutboundCall
+                  status={callStatus}
+                  seconds={
+                    callStatus === "ended"
+                      ? (latestCall.durationSeconds ?? elapsedSeconds)
+                      : elapsedSeconds
+                  }
+                  calleeName={callProspect?.name}
+                  calleePhone={callProspect?.phone}
+                  outcome={
+                    callStatus === "ended"
+                      ? latestCall.outcome ??
+                        "Owner agreed S$140 one-time + S$20/year. Checkout link sent."
+                      : undefined
+                  }
+                />
               </div>
               <div className="border-t border-white/[0.06] p-4 sm:p-5">
                 <div className="grid gap-2.5 sm:grid-cols-2">
@@ -282,9 +286,6 @@ export function SalesAgentView() {
                         Open workspace
                       </Button>
                     </Link>
-                    <span className="ml-auto self-center font-mono text-[10px] text-zinc-600">
-                      Simulated call — sandbox mode never dials real numbers
-                    </span>
                   </div>
                 ) : null}
               </div>

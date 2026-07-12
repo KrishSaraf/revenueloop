@@ -19,6 +19,10 @@ export function CountUp({
     const to = value;
     previousRef.current = value;
     if (from === to) return;
+    if (to < from) {
+      setDisplay(to);
+      return;
+    }
 
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const start = performance.now();
